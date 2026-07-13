@@ -1,0 +1,52 @@
+{
+  "incoming_exchange": [
+    {
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Academic and English language entry requirements for incoming Study Abroad students."
+    }
+  ],
+  "international_office": [
+    {
+      "title": "Contacts | International students",
+      "url": "https://www.bristol.ac.uk/international/contact/",
+      "description": "Contact the International Office and Centre for Study Abroad."
+    }
+  ],
+  "fact_sheet": [
+    {
+      "title": "Study Abroad at Bristol 2026/27",
+      "url": "https://www.bristol.ac.uk/media-library/sites/centre-for-study-abroad/documents/UoB_Centre_for_Study_Abroad_Guide_2026-27_Accessible.pdf?utm_source=test",
+      "description": "Official Study Abroad guide and fact sheet for 2026/27."
+    }
+  ],
+  "academic_calendar": [
+    {
+      "title": "University key dates calendar",
+      "url": "https://www.bristol.ac.uk/university/dates/",
+      "description": "Academic year and term dates for 2026/27."
+    }
+  ],
+  "course_catalog": [],
+  "housing": [
+    {
+      "title": "Study Abroad accommodation",
+      "url": "https://www.bristol.ac.uk/accommodation/study-abroad/",
+      "description": "Accommodation, tenancy dates and housing costs for Study Abroad students."
+    }
+  ],
+  "language_requirement": [
+    {
+      "title": "Profile H - Inbound Study Abroad",
+      "url": "https://www.bristol.ac.uk/study/language-requirements/profile-h/",
+      "description": "English language requirements including IELTS and TOEFL for Study Abroad."
+    }
+  ],
+  "application_guide": [
+    {
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Application and entry requirements for Study Abroad."
+    }
+  ]
+}

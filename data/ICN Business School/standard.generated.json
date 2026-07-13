@@ -1,0 +1,278 @@
+{
+  "schema_version": "1.0.0",
+  "research_date": "2026-07-14",
+  "university": {
+    "university_name": "ICN Business School",
+    "country": "France",
+    "city": "Paris, Nancy, Berlin",
+    "official_website_url": "https://www.icn-artem.com/en/international/",
+    "international_office_url": "https://www.icn-artem.com/en/international/",
+    "incoming_exchange_url": "https://www.icn-artem.com/en/international/exchange-programmes/",
+    "international_student_count": 900,
+    "summary": "ICN Business School welcomes 900 international students annually across its campuses in Nancy, Paris, and Berlin, offering exchange programmes for the 2026/27 academic year. The school is ranked 67th globally by the Financial Times 2025 and holds triple accreditation (AACSB, AMBA, EQUIS).",
+    "strengths": [
+      "- Triple accredited business school (AACSB, AMBA, EQUIS)\n- Ranked 67th best business school in the world (Financial Times 2025)\n- 80+ nationalities represented\n- 52% international faculty\n- 43% international student body\n- Strong international network with 140 partner universities in 40 countries\n- Paris La Défense campus offers direct access to 2,800 major companies\n- Berlin campus inaugurated in 2025, located in Moabit district near start-ups"
+    ],
+    "facilities": [
+      "- 360° virtual tours available for Paris, Berlin, and Nancy campuses\n- Nancy campus: vibrant cultural environment, strategic location in Europe's third-largest student city by 2026\n- Paris La Défense campus: located in Europe's fourth largest business district with access to CAC 40 companies\n- Berlin campus: natural setting along River Spree with numerous parks, close to world-leading start-ups"
+    ],
+    "student_life": [
+      "{'incoming_exchange': 'ICN Business School welcomes 900 international students annually across its campuses in Nancy, Paris, and Berlin. Incoming students can join for autumn semester, spring semester, or full academic year. The school offers orientation days, events, and support from the International Relations Office before and during studies. Student accommodation options include studios, shared flats, and halls of residence through dedicated partner platforms.', 'summer_programme': '- Dates: 22 June to 3 July 2026\\n- Locations: Paris and Berlin\\n- Credits: 8 ECTS\\n- Fees: €2,700 for partner institution students, €3,200 for external applicants\\n- Language: All courses taught in English (B2 level required, except for English-speaking countries)\\n- Assessment: Final presentation showcasing work done throughout the programme\\n- Includes: Accommodation in shared rooms, lunches on weekdays, train journey between Paris and Berlin, two cultural visits, two company visits\\n- No specific scholarships offered, but students encouraged to check with home institutions', 'events': {'icn_study_tour': 'Paris & Berlin | 28.07.26 - 05.07.26 (Note: date appears to be incorrectly formatted in source)\\n- Discover the event: https://www.icn-artem.com/en/event/icn-study-tour/', 'coaching_session': 'Paris, Nancy, Online | 04.03.27\\n- Discover the event: https://www.icn-artem.com/en/event/coaching-session/', 'coaching_session_2': 'Paris, Nancy, Online | 01.07.26\\n- Discover the event: https://www.icn-artem.com/en/event/coaching-session-2/'}}"
+    ],
+    "local_life": [
+      "{'paris': \"Paris La Défense campus situated at heart of Europe's leading business district (fourth largest in world) with direct access to 2,800 major French (CAC 40) and international companies. Vibrant cultural environment with extensive student-focused activities.\", 'nancy': \"Nancy – ARTEM campus in vibrant cultural environment, strategic location in Europe. Described as France's third-largest student city by 2026 (Le Parisien prediction). Human scale city with wide range of student-focused activities and impressive cultural/historical heritage.\", 'berlin': 'Berlin campus in natural environment along River Spree surrounded by numerous parks. Recently opened (inaugurated 2025) in Moabit district, close to world-leading start-ups and exceptional cultural life in German capital.'}"
+    ]
+  },
+  "exchange_program": {
+    "academic_year": "2026/27",
+    "program_name": "Incoming Exchange",
+    "semester_options": [
+      "Autumn 2026",
+      "Spring 2027",
+      "Full academic year 2026/27"
+    ],
+    "exchange_type": "study abroad",
+    "application_process": "Contact your school's international office to find out about pre-selection criteria. Once officially nominated, receive email with link to online application form.",
+    "course_registration_notes": "Courses completed abroad are fully recognized and contribute to credit transfer, and may also lead to a double degree.",
+    "course_restrictions": [
+      "Each programme has its own fixed list of courses."
+    ],
+    "additional_requirements": {
+      "extracted_notes": "Participants must provide evidence of at least B2 level English proficiency, unless from an English-speaking country.",
+      "manual_sources": [
+        {
+          "title": "16012510",
+          "source_types": [
+            "manual_document"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/manual sources/inbox/16012510.doc"
+        }
+      ]
+    },
+    "verification_status": "partial",
+    "verified_at": null
+  },
+  "application_deadlines": [
+    {
+      "semester": "autumn",
+      "deadline_type": "nomination",
+      "deadline_date": null,
+      "deadline_text": "Contact your school’s international office to find out about the pre-selection criteria. Once you have been officially nominated, you will receive an email with a link to the online application form.",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "semester": "spring",
+      "deadline_type": "nomination",
+      "deadline_date": null,
+      "deadline_text": "Contact your school’s international office to find out about the pre-selection criteria. Once you have been officially nominated, you will receive an email with a link to the online application form.",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    }
+  ],
+  "language_requirements": [
+    {
+      "language": "English",
+      "test_type": "B2 level",
+      "overall_score": null,
+      "score_details": null,
+      "level": "B2",
+      "is_required": true,
+      "exemption_conditions": "This requirement does not apply to students from English-speaking countries.",
+      "notes": null,
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    }
+  ],
+  "academic_periods": [
+    {
+      "semester": "Autumn 2026",
+      "period_type": "semester",
+      "start_date": "2026-09-01",
+      "end_date": "2026-12-20",
+      "start_text": "Autumn semester 2026",
+      "end_text": "Autumn semester 2026",
+      "notes": "University-wide academic calendar for incoming exchange students",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "semester": "Spring 2027",
+      "period_type": "semester",
+      "start_date": "2027-01-08",
+      "end_date": "2027-05-22",
+      "start_text": "Spring semester 2027",
+      "end_text": "Spring semester 2027",
+      "notes": "University-wide academic calendar for incoming exchange students",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "semester": "Full academic year 2026/27",
+      "period_type": "academic_year",
+      "start_date": "2026-09-01",
+      "end_date": "2027-05-22",
+      "start_text": "Full academic year 2026/27",
+      "end_text": "Full academic year 2026/27",
+      "notes": "University-wide academic calendar for incoming exchange students",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    }
+  ],
+  "housing_options": [],
+  "estimated_costs": [],
+  "required_documents": [
+    {
+      "document_type": "nomination",
+      "document_name": "official nomination from home university",
+      "is_required": true,
+      "preparation_stage": "pre-selection",
+      "submission_method": "email with link to online application form",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "document_type": "application_form",
+      "document_name": "online application form",
+      "is_required": true,
+      "preparation_stage": "post-nomination",
+      "submission_method": "online",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    }
+  ],
+  "source_links": [
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange programmes - ICN Artem",
+      "url": "https://www.icn-artem.com/en/international/exchange-programmes/",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-14",
+      "notes": null
+    },
+    {
+      "source_type": "international_office",
+      "title": "International - ICN Business School",
+      "url": "https://www.icn-artem.com/en/international/",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-14",
+      "notes": null
+    }
+  ],
+  "unverified_items": [
+    {
+      "category": "quota",
+      "field_name": "quota",
+      "reason": "not_found_in_official_sources",
+      "details": "No specific quota information provided for incoming exchange programme in official sources.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "minimum_gpa",
+      "field_name": "minimum_gpa",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum GPA requirement specified for incoming exchange programme in official sources.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "minimum_year_level",
+      "field_name": "minimum_year_level",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum year level requirement specified for incoming exchange programme in official sources.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "tuition_waived",
+      "field_name": "tuition_waived",
+      "reason": "not_found_in_official_sources",
+      "details": "No information on tuition waiver for incoming exchange students in official sources.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "application_process",
+      "field_name": "application_process",
+      "reason": "not_found_in_official_sources",
+      "details": "Pre-selection criteria mentioned but specific application process details not provided.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "course_restrictions",
+      "field_name": "course_restrictions",
+      "reason": "not_found_in_official_sources",
+      "details": "No information on course restrictions for incoming exchange students.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "additional_requirements",
+      "field_name": "additional_requirements",
+      "reason": "not_found_in_official_sources",
+      "details": "No additional requirements specified for incoming exchange programme.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "document_name",
+      "field_name": "document_name",
+      "reason": "not_found_in_official_sources",
+      "details": "No specific document name mentioned for incoming exchange application.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "application_deadlines",
+      "field_name": "exact application submission deadline",
+      "reason": "not_found_in_official_sources",
+      "details": "The document mentions nomination deadlines but does not specify exact application submission deadlines for 2026/27 academic year.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "language_requirements",
+      "field_name": "French language requirement",
+      "reason": "only_in_unofficial_sources",
+      "details": "No official source mentions French language requirements for incoming exchange students.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "required_documents",
+      "field_name": "proof of financial means",
+      "reason": "only_in_unofficial_sources",
+      "details": "Financial proof requirements are not mentioned in the official exchange programme page.",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "summer_programme",
+      "field_name": "summer_programme_dates",
+      "reason": "not_found_in_official_sources",
+      "details": "Document mentions summer programme dates as 22 June to 3 July 2026 but this appears to be for a previous year based on the target academic year 2026/27",
+      "source_url": "https://www.icn-artem.com/en/international/exchange-programmes/"
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "housing_options",
+      "reason": "not_found_in_official_sources",
+      "details": "No official university sources or fact sheets were provided for ICN Business School housing costs. Only unofficial student reports exist, which are not sufficient for official exchange program information.",
+      "source_url": null
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "estimated_costs",
+      "reason": "not_found_in_official_sources",
+      "details": "No official university sources or fact sheets were provided for ICN Business School housing costs. Only unofficial student reports exist, which are not sufficient for official exchange program information.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "summer_programme_dates",
+      "reason": "ambiguous",
+      "details": "Source shows '28.07.26 - 05.07.26' which appears to be incorrectly formatted or contains a typo, conflicting with the stated programme dates of 22 June to 3 July 2026",
+      "source_url": "https://www.icn-artem.com/en/international/"
+    },
+    {
+      "category": "student_life",
+      "field_name": "summer_programme_dates",
+      "reason": "ambiguous",
+      "details": "The date format '28.07.26 - 05.07.26' is inconsistent with the clearly stated programme dates of 22 June to 3 July 2026 in the Summer Programme section",
+      "source_url": "https://www.icn-artem.com/en/international/"
+    }
+  ]
+}

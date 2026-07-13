@@ -1,0 +1,628 @@
+{
+  "schema_version": "1.0.0",
+  "checked_at": "2026-07-11T19:36:52.287431+00:00",
+  "valid_schema": true,
+  "passed": true,
+  "summary": {
+    "errors": 0,
+    "warnings": 85,
+    "auto_fixed": 84,
+    "counts_before": {
+      "application_deadlines": 2,
+      "language_requirements": 10,
+      "academic_periods": 3,
+      "housing_options": 84,
+      "estimated_costs": 2,
+      "required_documents": 5,
+      "source_links": 7,
+      "unverified_items": 48
+    },
+    "counts_after": {
+      "application_deadlines": 2,
+      "language_requirements": 10,
+      "academic_periods": 3,
+      "housing_options": 84,
+      "estimated_costs": 2,
+      "required_documents": 5,
+      "source_links": 7,
+      "unverified_items": 48
+    }
+  },
+  "issues": [
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.0.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.1.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.2.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.3.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.4.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.5.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.6.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.7.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.8.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.9.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.10.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.11.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.12.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.13.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.14.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.15.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.16.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.17.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.18.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.19.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.20.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.21.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.22.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.23.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.24.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.25.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.26.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.27.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.28.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.29.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.30.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.31.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.32.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.33.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.34.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.35.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.36.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.37.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.38.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.39.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.40.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.41.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.42.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.43.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.44.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.45.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.46.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.47.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.48.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.49.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.50.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.51.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.52.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.53.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.54.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.55.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.56.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.57.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.58.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.59.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.60.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.61.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.62.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.63.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.64.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.65.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.66.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.67.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.68.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.69.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.70.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.71.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.72.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.73.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.74.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.75.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.76.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.77.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.78.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.79.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.80.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.81.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.82.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.83.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "many_unverified_items",
+      "path": "unverified_items",
+      "message": "미확인 항목이 48개입니다. 사람 검수 시 우선 확인하세요.",
+      "fixed": false
+    }
+  ]
+}

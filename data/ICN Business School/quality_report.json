@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "checked_at": "2026-07-13T15:03:38.903566+00:00",
+  "valid_schema": true,
+  "passed": true,
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "auto_fixed": 0,
+    "counts_before": {
+      "application_deadlines": 2,
+      "language_requirements": 1,
+      "academic_periods": 3,
+      "housing_options": 0,
+      "estimated_costs": 0,
+      "required_documents": 2,
+      "source_links": 2,
+      "unverified_items": 16
+    },
+    "counts_after": {
+      "application_deadlines": 2,
+      "language_requirements": 1,
+      "academic_periods": 3,
+      "housing_options": 0,
+      "estimated_costs": 0,
+      "required_documents": 2,
+      "source_links": 2,
+      "unverified_items": 16
+    }
+  },
+  "issues": []
+}

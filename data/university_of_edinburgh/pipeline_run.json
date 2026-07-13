@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "University of Edinburgh",
+  "started_at": "2026-07-12T15:26:06.150158+00:00",
+  "completed_at": "2026-07-12T15:26:08.685772+00:00",
+  "status": "completed",
+  "stages": {
+    "save": {
+      "status": "completed",
+      "university_id": "683c3d79-5dca-42ba-8d62-4fd987856c6c",
+      "exchange_program_id": "02a1c74b-445c-4d8a-879c-ea5f96702d45",
+      "inserted_rows": {
+        "application_deadlines": 3,
+        "language_requirements": 6,
+        "academic_periods": 10,
+        "housing_options": 3,
+        "estimated_costs": 1,
+        "required_documents": 4,
+        "source_links": 8
+      }
+    },
+    "inspect": {
+      "status": "completed",
+      "exists": true,
+      "university_id": "683c3d79-5dca-42ba-8d62-4fd987856c6c",
+      "exchange_program_id": "02a1c74b-445c-4d8a-879c-ea5f96702d45",
+      "row_counts": {
+        "application_deadlines": 3,
+        "language_requirements": 6,
+        "academic_periods": 10,
+        "housing_options": 3,
+        "estimated_costs": 1,
+        "required_documents": 4,
+        "source_links": 8
+      }
+    }
+  },
+  "artifacts": {
+    "discovery": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/discovered_sources.live.json",
+    "manifest": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/parsed_documents/manifest.json",
+    "generated": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/standard.generated.json",
+    "cleaned": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/standard.cleaned.json",
+    "quality_report": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/quality_report.json"
+  }
+}

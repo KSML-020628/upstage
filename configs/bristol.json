@@ -1,0 +1,13 @@
+{
+  "university_name": "University of Bristol",
+  "slug": "university_of_bristol",
+  "official_domain": "bristol.ac.uk",
+  "academic_year": "2026/27",
+  "program_name": "Study Abroad",
+  "search_limit": 3,
+  "solar_model": "solar-pro3",
+  "manual_dir": "data/university_of_bristol/manual sources/inbox",
+  "generated_file": "bristol.standard.generated.json",
+  "cleaned_file": "bristol.standard.cleaned.json",
+  "quality_report_file": "quality_report.json"
+}

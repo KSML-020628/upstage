@@ -1,0 +1,210 @@
+{
+  "schema_version": "1.0.0",
+  "research_date": "2026-07-12",
+  "university": {
+    "university_name": "University of Bristol",
+    "country": "United Kingdom",
+    "city": "Bristol",
+    "official_website_url": "https://www.bristol.ac.uk/",
+    "international_office_url": null,
+    "incoming_exchange_url": null,
+    "latitude": null,
+    "longitude": null,
+    "student_count": null,
+    "international_student_count": null,
+    "summary": null,
+    "strengths": null,
+    "facilities": null,
+    "student_life": null,
+    "local_life": null
+  },
+  "exchange_program": {
+    "academic_year": "2026/27",
+    "program_name": "Study Abroad",
+    "semester_options": ["Autumn semester", "Spring semester", "Full academic year"],
+    "exchange_type": "exchange_or_direct_enrol",
+    "quota": null,
+    "minimum_gpa": null,
+    "minimum_year_level": null,
+    "tuition_waived": true,
+    "application_process": null,
+    "course_registration_notes": null,
+    "course_restrictions": null,
+    "additional_requirements": {
+      "pathways": [
+        "Study Abroad (General pathway)",
+        "Study Abroad (Subject pathway)",
+        "STABEL (Study Abroad with English Language)"
+      ]
+    },
+    "document_name": "Study Abroad at Bristol 2026/27",
+    "verification_status": "partial",
+    "verified_at": null
+  },
+  "application_deadlines": [],
+  "language_requirements": [],
+  "academic_periods": [
+    {
+      "semester": "Autumn semester",
+      "period_type": "semester",
+      "start_date": null,
+      "end_date": null,
+      "start_text": "September 2026",
+      "end_text": "December 2026",
+      "notes": null,
+      "source_url": null
+    },
+    {
+      "semester": "Spring semester",
+      "period_type": "semester",
+      "start_date": null,
+      "end_date": null,
+      "start_text": "January 2027",
+      "end_text": "May 2027",
+      "notes": null,
+      "source_url": null
+    },
+    {
+      "semester": "Full academic year",
+      "period_type": "semester",
+      "start_date": null,
+      "end_date": null,
+      "start_text": "September 2026",
+      "end_text": "May 2027",
+      "notes": null,
+      "source_url": null
+    }
+  ],
+  "housing_options": [
+    {
+      "housing_category": "university",
+      "meal_type": "self_catered",
+      "room_type": "twin_shared",
+      "cost_min": 1709,
+      "cost_max": 2806,
+      "currency": "GBP",
+      "billing_period": "semester",
+      "cost_text": "£1,709 to £2,806",
+      "is_guaranteed": null,
+      "guarantee_conditions": null,
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": false,
+      "notes": "Cost figures are based on 2025/26 information.",
+      "source_url": null
+    },
+    {
+      "housing_category": "university",
+      "meal_type": "self_catered",
+      "room_type": "single",
+      "cost_min": 1963,
+      "cost_max": 5184,
+      "currency": "GBP",
+      "billing_period": "semester",
+      "cost_text": "£1,963 to £5,184",
+      "is_guaranteed": null,
+      "guarantee_conditions": null,
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": false,
+      "notes": "Cost figures are based on 2025/26 information.",
+      "source_url": null
+    },
+    {
+      "housing_category": "university",
+      "meal_type": null,
+      "room_type": null,
+      "cost_min": null,
+      "cost_max": null,
+      "currency": null,
+      "billing_period": null,
+      "cost_text": null,
+      "is_guaranteed": true,
+      "guarantee_conditions": "September-entry exchange students are guaranteed an offer if they apply by the deadline.",
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": null,
+      "notes": "Exchange students; January entry is not guaranteed.",
+      "source_url": null
+    }
+  ],
+  "estimated_costs": [
+    {
+      "cost_type": "tuition",
+      "amount_min": 22315,
+      "amount_max": 22315,
+      "currency": "GBP",
+      "billing_period": "academic_year",
+      "reference_period": "2026/27",
+      "original_text": "£22,315",
+      "notes": "Full-year direct-enrol Study Abroad tuition fee; nominated exchange students are exempt.",
+      "source_url": null
+    },
+    {
+      "cost_type": "tuition",
+      "amount_min": 11475,
+      "amount_max": 11475,
+      "currency": "GBP",
+      "billing_period": "semester",
+      "reference_period": "2026/27",
+      "original_text": "£11,475",
+      "notes": "One-semester direct-enrol Study Abroad tuition fee; nominated exchange students are exempt.",
+      "source_url": null
+    },
+    {
+      "cost_type": "private_rent",
+      "amount_min": 500,
+      "amount_max": 800,
+      "currency": "GBP",
+      "billing_period": "month",
+      "reference_period": null,
+      "original_text": "between £500 and £800 or more in monthly rent",
+      "notes": "Bills are not included and the upper bound is open-ended.",
+      "source_url": "https://www.bristol.ac.uk/living-expenses"
+    }
+  ],
+  "required_documents": [],
+  "source_links": [
+    {
+      "source_type": "fact_sheet",
+      "title": "Study Abroad at Bristol 2026/27",
+      "url": "https://www.bristol.ac.uk/study-abroad/",
+      "is_official": true,
+      "published_year": "2026/27",
+      "checked_at": "2026-07-12",
+      "notes": "Example official source link; replace with the exact fact-sheet URL when available."
+    },
+    {
+      "source_type": "living_cost_guide",
+      "title": "Living expenses guide",
+      "url": "https://www.bristol.ac.uk/living-expenses",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-12",
+      "notes": null
+    }
+  ],
+  "unverified_items": [
+    {
+      "category": "application",
+      "field_name": "application_deadlines",
+      "reason": "not_found_in_official_sources",
+      "details": "The provided sample did not contain nomination or application deadlines.",
+      "source_url": null
+    },
+    {
+      "category": "language",
+      "field_name": "language_requirements",
+      "reason": "not_found_in_official_sources",
+      "details": "The provided sample did not contain exact language test requirements.",
+      "source_url": null
+    },
+    {
+      "category": "documents",
+      "field_name": "required_documents",
+      "reason": "not_found_in_official_sources",
+      "details": "The provided sample did not contain an application document checklist.",
+      "source_url": null
+    }
+  ]
+}

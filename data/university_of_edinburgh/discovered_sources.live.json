@@ -1,0 +1,362 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "University of Edinburgh",
+  "official_domain": "ed.ac.uk",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-12T15:11:19.082713+00:00",
+  "provider": "firecrawl",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "Study abroad programmes | International applicants",
+      "url": "https://www.ed.ac.uk/studying/international/applying/visiting-students",
+      "description": "You can select from five flexible options to study abroad at the University of Edinburgh and you can choose to study for one semester or the full academic year.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "Contact us | International applicants - The University of Edinburgh",
+      "url": "https://www.ed.ac.uk/studying/international/contact-us",
+      "description": "Have a question about studying at the University of Edinburgh? To help us assist with your enquiry as efficiently as possible, please complete one of the below ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" international office contact"
+    },
+    "fact_sheet": {
+      "source_type": "fact_sheet",
+      "title": "[PDF] Visiting Student 2026 Application Guide /27 - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf",
+      "description": "https://global.ed.ac.uk/study-abroad/diary. When you are ready to apply, please select How to apply and then Apply now. Page 3. Visiting Student Application ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 80,
+      "discovery_query": "site:ed.ac.uk filetype:pdf \"study abroad\" guide \"2026/27\""
+    },
+    "academic_calendar": {
+      "source_type": "academic_calendar",
+      "title": "[PDF] MBChB Semester Dates 2026-27 .pdf",
+      "url": "https://medicine-vet-medicine.ed.ac.uk/sites/default/files/2026-02/MBChB%20Semester%20Dates%202026-27%20.pdf",
+      "description": "MBChB Academic Year 2026/27. During academic year 2026/27 students are required to attend for the dates outlined below. YEAR 1 Semester. Dates (Mon-Fri).",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk academic calendar term dates \"2026/27\""
+    },
+    "course_catalog": {
+      "source_type": "course_catalog",
+      "title": "[PDF] University of Virginia, USA",
+      "url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf",
+      "description": "Courses. The course catalogue can be found here. **Please be aware, there may not be an up-to-date course catalogue available at this exchange destination.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 55,
+      "discovery_query": "site:ed.ac.uk course catalog catalogue exchange students"
+    },
+    "housing": {
+      "source_type": "housing",
+      "title": "Accommodation | International Foundation Programme",
+      "url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation",
+      "description": "The following costs are indicative for the 2026/27 academic year: Accommodation Options. 1. John Burnett House. Large ensuite, catered. Total ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    "language_requirement": {
+      "source_type": "language_requirement",
+      "title": "Study Abroad programme - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview",
+      "description": "The above English language requirements may not apply if you are studying ... 2026/27, Period, Tuition fee. Full academic year, September 2026 to ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:ed.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    "application_guide": {
+      "source_type": "application_guide",
+      "title": "Application guide and supporting document checklist | Study abroad ...",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide",
+      "description": "Course Ranking Form 2026/27 (38 KB / DOCX). Application deadline. All applications must be submitted by the deadline. Dates for your diary ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 85,
+      "discovery_query": "site:ed.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    }
+  },
+  "candidates": [
+    {
+      "source_type": "academic_calendar",
+      "title": "[PDF] MBChB Semester Dates 2026-27 .pdf",
+      "url": "https://medicine-vet-medicine.ed.ac.uk/sites/default/files/2026-02/MBChB%20Semester%20Dates%202026-27%20.pdf",
+      "description": "MBChB Academic Year 2026/27. During academic year 2026/27 students are required to attend for the dates outlined below. YEAR 1 Semester. Dates (Mon-Fri).",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "Academic year 2026/27 - Semester Dates",
+      "url": "https://semester-dates.ed.ac.uk/202627",
+      "description": "Semester dates for the 2026/27 academic year. Semester 1 21 September - 21 December 2026 Semester 2 11 January - 22 May 2027",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "Semester Dates | The University of Edinburgh",
+      "url": "https://semester-dates.ed.ac.uk/",
+      "description": "Semester dates · 2027/28 · 2026/27 · 2025/26 · 2024/25 · Archive semester dates ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:ed.ac.uk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Application guide and supporting document checklist | Study abroad ...",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide",
+      "description": "Course Ranking Form 2026/27 (38 KB / DOCX). Application deadline. All applications must be submitted by the deadline. Dates for your diary ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 85,
+      "discovery_query": "site:ed.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Application timeline | Study and Work Away Service | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-and-work-away-service/study-exchanges/application/application-timeline",
+      "description": "The following table outlines the timeline for each stage of the 2026/27 exchange application process, including when students should expect to ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "International exchange | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/international-exchange",
+      "description": "Exchange destinations 2026–27. What can I study? If you are coming on ... An academic reference is not required for nominated exchange applicants.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "[PDF] University of Virginia, USA",
+      "url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf",
+      "description": "Courses. The course catalogue can be found here. **Please be aware, there may not be an up-to-date course catalogue available at this exchange destination.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 55,
+      "discovery_query": "site:ed.ac.uk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Course finder | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/course",
+      "description": "Use our course finder to browse courses available for visiting students at the University of Edinburgh (Period of Study 26-27).",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "[PDF] University of Chicago, USA",
+      "url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_chicago_0.pdf",
+      "description": "Note: Exchange students will be at Chicago for quarters 2,. 3, and 4. Number of students currently enrolled. 18,000. Academic restrictions at a glance. Please ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "[PDF] Visiting Student 2026 Application Guide /27 - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf",
+      "description": "https://global.ed.ac.uk/study-abroad/diary. When you are ready to apply, please select How to apply and then Apply now. Page 3. Visiting Student Application ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 80,
+      "discovery_query": "site:ed.ac.uk filetype:pdf \"study abroad\" guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "[PDF] Visiting Student 2026 Application Guide /27 - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026/27.pdf",
+      "description": "Application Guide. /27. Page 2. Visiting Student Application ... as Arcadia, IFSA Butler or API) then you should select. Applying via a Study Abroad Provider.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 80,
+      "discovery_query": "site:ed.ac.uk filetype:pdf \"study abroad\" guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "[PDF] Exchange Destinations - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-04/Exchange%20Destinations%202026-27.pdf",
+      "description": "opportunity to study abroad at one of our exchange partner institutions worldwide. This guide contains our expected 2026/27 partners.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 80,
+      "discovery_query": "site:ed.ac.uk filetype:pdf \"study abroad\" guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad",
+      "description": "Spend a year or a semester studying abroad at the University of Edinburgh with Study Abroad in Edinburgh ... Applications for 2026/27 ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Where can I go? | Study and Work Away Service - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-work-away/study-exchanges/where-can-i-go",
+      "description": "The University of Edinburgh offers students the opportunity to study abroad in Europe and beyond. ... Read the 2026-27 Exchange destinations guide ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "International exchange | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/international-exchange",
+      "description": "... University of Edinburgh AND your home institution has nominated you to study with us. ... Exchange destinations 2026–27. What can I study? If you ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "Accommodation | International Foundation Programme",
+      "url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation",
+      "description": "The following costs are indicative for the 2026/27 academic year: Accommodation Options. 1. John Burnett House. Large ensuite, catered. Total ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "Freeze Students Rents - Edinburgh University Students' Association",
+      "url": "https://www.eusa.ed.ac.uk/newsandblogs/article/freezestudentrents-2025",
+      "description": "We're calling on you to: Freeze rents in all University-managed accommodation for the 2026/27 academic year. Where this isn't possible ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "VP Community - Edinburgh University Students' Association",
+      "url": "https://www.eusa.ed.ac.uk/yourvoice/yourrepresentatives/vpcommunity",
+      "description": "Vice President Community 2026/27 Objectives ​. An affordable student life: We'll ensure that all students have access to safe and suitable accommodation, and ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Study abroad programmes | International applicants",
+      "url": "https://www.ed.ac.uk/studying/international/applying/visiting-students",
+      "description": "You can select from five flexible options to study abroad at the University of Edinburgh and you can choose to study for one semester or the full academic year.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "International exchange | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/international-exchange",
+      "description": "Tuition fees. International Exchange students will not pay any tuition fees to the University of Edinburgh.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad",
+      "description": "Interested in international study in Scotland? Spend a year or a semester studying abroad at the University of Edinburgh with Study Abroad ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contact us | International applicants - The University of Edinburgh",
+      "url": "https://www.ed.ac.uk/studying/international/contact-us",
+      "description": "Have a question about studying at the University of Edinburgh? To help us assist with your enquiry as efficiently as possible, please complete one of the below ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "International applicants - The University of Edinburgh",
+      "url": "https://www.ed.ac.uk/studying/international",
+      "description": "Support and information on admissions, fees and funding for international applicants to the University of Edinburgh.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contacts | Undergraduate entry requirements by region",
+      "url": "https://www.ed.ac.uk/studying/international/country/contacts",
+      "description": "If you are a University of Edinburgh staff member: It's best to contact individual members of the SRA team via email. If you are a prospective ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ed.ac.uk \"University of Edinburgh\" international office contact"
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Study Abroad programme - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview",
+      "description": "The above English language requirements may not apply if you are studying ... 2026/27, Period, Tuition fee. Full academic year, September 2026 to ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:ed.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "European exchange | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/european-exchange",
+      "description": "Exchange destinations 2026–27. The University of Edinburgh and ... The above English language requirements may not apply if you are studying ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:ed.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "International exchange | Study abroad in Edinburgh | Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/international-exchange",
+      "description": "Exchange destinations 2026–27. What can I study? If you are coming on ... The above English language requirements may not apply if you are ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:ed.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "City University of Hong Kong",
+  "started_at": "2026-07-13T14:54:32.752079+00:00",
+  "completed_at": "2026-07-13T14:55:37.203896+00:00",
+  "status": "failed",
+  "stages": {
+    "discover": {
+      "status": "reused",
+      "candidates": 24
+    },
+    "collect": {
+      "status": "completed",
+      "total": 12,
+      "succeeded": 11,
+      "failed": 1,
+      "skipped": 0
+    }
+  },
+  "artifacts": {
+    "discovery": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/City University of HONG KONG/discovered_sources.live.json",
+    "manifest": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/City University of HONG KONG/parsed_documents/manifest.json",
+    "generated": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/City University of HONG KONG/standard.generated.json",
+    "cleaned": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/City University of HONG KONG/standard.cleaned.json",
+    "quality_report": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/City University of HONG KONG/quality_report.json"
+  },
+  "error": "문서 수집 실패가 1건 있습니다."
+}

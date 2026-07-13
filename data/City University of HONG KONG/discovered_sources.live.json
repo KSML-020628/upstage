@@ -1,0 +1,332 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "City University of Hong Kong",
+  "official_domain": "cityu.edu.hk",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-13T14:52:41.241154+00:00",
+  "provider": "firecrawl",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Students | CityUHK Admission",
+      "url": "https://www.cityu.edu.hk/admo/admissions/exchange-students",
+      "description": "... exchange agreements with partner institutions, sometimes with restrictions on the discipline of study. ... City University of Hong Kong.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "Home | Global Engagement Office",
+      "url": "https://www.cityu.edu.hk/geo",
+      "description": "Global Engagement Office · Home · Global ... Contact Us · City University of Hong Kong · Facebook · Instagram · Youtube. © 2026 City University of Hong Kong.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" international office contact"
+    },
+    "fact_sheet": {
+      "source_type": "fact_sheet",
+      "title": "Tentative Course Offered List of Semester A, 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/international_student/information/application_sema",
+      "description": "Tentative Course Offered List of Semester A, 2026/27. Department of ... © 2020 City University of Hong Kong. All Rights Reserved. City University of ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    "academic_calendar": {
+      "source_type": "academic_calendar",
+      "title": "Provisional Academic Calendar 2025/26",
+      "url": "https://www.cityu.edu.hk/arro/files/file/hk/calendar/provcal2526_2627.pdf",
+      "description": "Term Break. 10 August 2026. 29 August 2026. * Lunar New Year holidays: 17 – 19 February 2026. Provisional Academic Calendar 2026/27. Start Date.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk academic calendar term dates \"2026/27\""
+    },
+    "course_catalog": {
+      "source_type": "course_catalog",
+      "title": "Tentative Course Offered List of Semester B, 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/international_student/information/application_semB",
+      "description": "Course list for inbound exchange students is subject to further changes without prior notice. Course approval will be considered on a case-by-case basis.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk course catalog catalogue exchange students"
+    },
+    "housing": {
+      "source_type": "housing",
+      "title": "Student Residence",
+      "url": "https://www.cityu.edu.hk/sro/StudentHousing/UGHalls/NLS/IES.htm",
+      "description": "Residence Tutorship 2026/27 · Kowloon Tong Compound · Ma On Shan Compound ... Incoming Bachelor's Degree exchange student who wish to apply for an extension of ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:cityu.edu.hk study abroad exchange accommodation housing \"2026/27\""
+    },
+    "language_requirement": {
+      "source_type": "language_requirement",
+      "title": "Global Engineering Education Exchange (Global E3)",
+      "url": "https://www.cityu.edu.hk/ceng/-/media/project/cityuhk/academic/ceng/global-outreach/student-exchange/outbound-exchange/exchange-quota/ceng_student_quota_college_level.pdf?rev=4ff7cda144c34740a23348e4dda9940a&hash=FFD9A43A842EC2FB7CEDE5AFBC2A9BF8",
+      "description": "Student Exchange Programme 2026-27 (First Round). College level quota ... English Language Requirement: TOEFL: 79(IBT). IELTS: overall 6.0. Proof of JLPT ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 70,
+      "discovery_query": "site:cityu.edu.hk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    "application_guide": {
+      "source_type": "application_guide",
+      "title": "International Exchange - Fact Sheet 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/documents/CityU%20Fact%20Sheet%202026-27%20UG.pdf",
+      "description": "Semester A 2026/27. Semester B 2026/27. Nomination Deadline (partners). 31 March 2026. 31 August 2026. Application Deadline (nominated students). 12 May 2026.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 85,
+      "discovery_query": "site:cityu.edu.hk incoming exchange application deadline nomination requirements \"2026/27\""
+    }
+  },
+  "candidates": [
+    {
+      "source_type": "academic_calendar",
+      "title": "Provisional Academic Calendar 2025/26",
+      "url": "https://www.cityu.edu.hk/arro/files/file/hk/calendar/provcal2526_2627.pdf",
+      "description": "Term Break. 10 August 2026. 29 August 2026. * Lunar New Year holidays: 17 – 19 February 2026. Provisional Academic Calendar 2026/27. Start Date.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "Academic Calendar 2026/27",
+      "url": "https://www.cityu.edu.hk/arro/impd/acad_nxyr_2627.htm",
+      "description": "Academic Calendar 2026/27 ·.ics file for Academic Calendar 2026/27 · Academic Calendar 2025/26 · Provisional Academic Calendars 2027/28 & 2028/29.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "Academic Calendar 2026/27",
+      "url": "https://www.cityu.edu.hk/calendar/academic/2026-2027",
+      "description": "Academic Calendar 2026/27. Semester A 2026/27; Semester B 2026/27; Summer Term 2027 ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "International Exchange - Fact Sheet 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/documents/CityU%20Fact%20Sheet%202026-27%20UG.pdf",
+      "description": "Semester A 2026/27. Semester B 2026/27. Nomination Deadline (partners). 31 March 2026. 31 August 2026. Application Deadline (nominated students). 12 May 2026.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 85,
+      "discovery_query": "site:cityu.edu.hk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Exchange Students | CityUHK Admission",
+      "url": "https://www.cityu.edu.hk/admo/admissions/exchange-students",
+      "description": "8 Apr - 15 May. 2026. Application Period for Semester A, 2026/27 (September – December 2026) ; 1 Sep - 15 Oct. 2026. Application Period for Semester B, 2026/27 ( ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Outbound Exchange Programmes | College of Science",
+      "url": "https://www.cityu.edu.hk/csci/global-outreach/student-exchange/outbound-exchange-programmes",
+      "description": "Application Period: 20 July 2026 - 31 August 2026. Result Announcement: 11 September 2026 onwards. Exchange Period: Semester B of 2026/27. Eligibility. Minimum ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Tentative Course Offered List of Semester B, 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/international_student/information/application_semB",
+      "description": "Course list for inbound exchange students is subject to further changes without prior notice. Course approval will be considered on a case-by-case basis.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Inbound Student Exchange Course List",
+      "url": "https://www.cityu.edu.hk/admo/exchange/exchange_course_list_202309.pdf",
+      "description": "Inbound Student Exchange Course List Page 1 Course Offering Department / Unit. Accountancy AC3202 Corporate Accounting I 3 Accountancy AC4161 Accounting ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Exchange Students | CityUHK Admission",
+      "url": "https://www.cityu.edu.hk/admo/admissions/exchange-students",
+      "description": "CityUHK has exchange links with over 400 partner universities worldwide. The University welcomes applications from exchange students.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:cityu.edu.hk course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Tentative Course Offered List of Semester A, 2026/27",
+      "url": "https://www.cb.cityu.edu.hk/exchange/international_student/information/application_sema",
+      "description": "Tentative Course Offered List of Semester A, 2026/27. Department of ... © 2020 City University of Hong Kong. All Rights Reserved. City University of ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Exchange Students | CityUHK Admission",
+      "url": "https://www.cityu.edu.hk/admo/admissions/exchange-students",
+      "description": "Application Period for Semester B, 2026/27 (January – May 2027). Application Period for Semester B, 2026/27 (January – May 2027) ... City University of Hong Kong.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Outbound Student Exchange | Global Engagement Office",
+      "url": "https://www.cityu.edu.hk/geo/global-opportunities/student-exchange/outbound-student-exchange",
+      "description": "Polish language ability & communication skills. News & Events. Second Round Application for 2026-27 ... © 2026 City University of Hong Kong. All Rights ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "Student Residence",
+      "url": "https://www.cityu.edu.hk/sro/StudentHousing/UGHalls/NLS/IES.htm",
+      "description": "Residence Tutorship 2026/27 · Kowloon Tong Compound · Ma On Shan Compound ... Incoming Bachelor's Degree exchange student who wish to apply for an extension of ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:cityu.edu.hk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "Inbound Exchange Students",
+      "url": "https://www.cityu.edu.hk/sro/StudentHousing/mos/ug_current_IES.html",
+      "description": "UG Hall Admission 2026/27 @ Ma On Shan Compound for Inbound Exchange Students (Semester A) ; Room Type, Double Room with communal toilet & bathroom on the same ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "New Non-Local Applicants",
+      "url": "https://www.cityu.edu.hk/sro/StudentHousing/mos/ug_new_nonlocal.html",
+      "description": "Under the current Hall Admission Policy, newly admitted NLS shall reside in the Ma On Shan Compound during their first year of study (i.e., 2026/27) and the ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:cityu.edu.hk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Students | CityUHK Admission",
+      "url": "https://www.cityu.edu.hk/admo/admissions/exchange-students",
+      "description": "... exchange agreements with partner institutions, sometimes with restrictions on the discipline of study. ... City University of Hong Kong.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Inbound Student Exchange | Global Engagement Office",
+      "url": "https://www.cityu.edu.hk/geo/global-opportunities/student-exchange/inbound-student-exchange",
+      "description": "We Welcome Students From our 400+ Partner Institutions! ... Find the one that fits you the best here! Our Partner Institutions. The City University of Hong Kong ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Programme | College of Business",
+      "url": "https://www.cb.cityu.edu.hk/exchange/",
+      "description": "Exchange Programme College of Business - City University of Hong Kong AACSB International EQUIS - European Quality Improvement System",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Home | Global Engagement Office",
+      "url": "https://www.cityu.edu.hk/geo",
+      "description": "Global Engagement Office · Home · Global ... Contact Us · City University of Hong Kong · Facebook · Instagram · Youtube. © 2026 City University of Hong Kong.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contact Us | Global Engagement Office",
+      "url": "https://www.cityu.edu.hk/geo/contact-us",
+      "description": "Global Engagement Office City University of Hong Kong Room 3-001, 3/F, CityUHK International Centre 22 Cornwall Street Kowloon, Hong Kong",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contact Us",
+      "url": "https://www.cityu.edu.hk/directories/contact",
+      "description": "City University of Hong Kong. Tat Chee Avenue Kowloon, Hong Kong. General enquiries: +852 3442-7654. 24-hour emergency: +852 3442-8888 · Maps and directions.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:cityu.edu.hk \"City University of Hong Kong\" international office contact"
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Global Engineering Education Exchange (Global E3)",
+      "url": "https://www.cityu.edu.hk/ceng/-/media/project/cityuhk/academic/ceng/global-outreach/student-exchange/outbound-exchange/exchange-quota/ceng_student_quota_college_level.pdf?rev=4ff7cda144c34740a23348e4dda9940a&hash=FFD9A43A842EC2FB7CEDE5AFBC2A9BF8",
+      "description": "Student Exchange Programme 2026-27 (First Round). College level quota ... English Language Requirement: TOEFL: 79(IBT). IELTS: overall 6.0. Proof of JLPT ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 70,
+      "discovery_query": "site:cityu.edu.hk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Student Exchange (Outbound) | College of Computing",
+      "url": "https://www.cityu.edu.hk/cc/outreach/student-exchange-outbound",
+      "description": "Sem A or B 2026/27. Eligibility. (1) Attained a minimum CGPA of 2.50 in your ... (2) Fulfilled one of the below minimum English language requirements ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:cityu.edu.hk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Student Exchange Programme",
+      "url": "https://www.cityu.edu.hk/cc/-/media/project/cityuhk/academic/cc/outreach/student-exchange-quick-guide-2025-26.pdf?rev=bea544f81b6b4c8ab082cd8e6b06172c&hash=AC02C7744DA34625737F26A069F86EDB",
+      "description": "Important Dates for 2026/27. Application Period. Application Method ... Semester B 2026/27. Sep 2026. Second Round. Feb – Mar 2026 via Home Department.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 40,
+      "discovery_query": "site:cityu.edu.hk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    }
+  ]
+}

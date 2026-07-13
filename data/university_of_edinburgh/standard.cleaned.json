@@ -1,0 +1,685 @@
+{
+  "schema_version": "1.0.0",
+  "research_date": "2026-07-13",
+  "university": {
+    "university_name": "University of Edinburgh",
+    "country": "United Kingdom",
+    "city": "Edinburgh",
+    "official_website_url": "https://www.ed.ac.uk/",
+    "international_office_url": "https://www.ed.ac.uk/studying/international/",
+    "incoming_exchange_url": "https://global.ed.ac.uk/study-abroad",
+    "summary": "The University of Edinburgh offers flexible study abroad options including Study Abroad Programme, International Exchange, Erasmus exchange, Parliamentary Programme, and Summer School courses. Students can choose to study for one semester or the full academic year.",
+    "strengths": [
+      "The university has a strong international student support system with dedicated Visiting Student Advisers, well-established exchange programs, and diverse academic offerings. It provides structured support for visiting students including course selection assistance, accommodation arrangements, and academic guidance."
+    ],
+    "facilities": [
+      "The university offers extensive facilities including modern gyms with various classes (yoga, boxing, zumba, dance), sports facilities (swimming pool, squash, fencing, basketball, climbing), and student societies. Accommodation options include both catered and self-catered residences with facilities like common rooms and fitness centers."
+    ],
+    "student_life": [
+      "Student life includes vibrant social activities, flat parties, and opportunities to join various clubs and societies. The university has an International Student Center offering trips and volunteer opportunities. There are also cultural experiences like Scottish traditional dance groups and Highland tours. The city offers free museums and art galleries, and innovative learning weeks provide travel opportunities within Europe."
+    ]
+  },
+  "exchange_program": {
+    "academic_year": "2026/27",
+    "program_name": "International Exchange",
+    "semester_options": [
+      "{'semester': 'Semester 1', 'start_date': '2026-09-21', 'end_date': '2026-12-21', 'notes': 'Semester 1 dates for 2026/27 academic year'}",
+      "{'semester': 'Semester 2', 'start_date': '2027-01-11', 'end_date': '2027-05-22', 'notes': 'Semester 2 dates for 2026/27 academic year'}"
+    ],
+    "exchange_type": "International Exchange",
+    "application_process": "Apply via online application system; select Visiting Student Category as 'Coming as a Nominated Exchange Student' and 'International Exchange'; complete course selection; submit application by deadline; receive email with MyEd portal registration instructions; upload supporting documents (Academic Transcript, English language certificate if required) within a month after application deadline; contact relevant Visiting Student Office (CAHSSvisitingstudents@ed.ac.uk or SCEvisitingstudents@ed.ac.uk) for questions",
+    "course_registration_notes": "All students are required to take 60 University of Edinburgh credits per semester. Select a maximum of 100 course credits per semester in case your first choices are not available (standard semester credit load is 60 credits). [Source: https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf]\n\nYou will NOT receive an email containing a link to complete your application at this stage. This will happen later in Step 9. If you couldn't add your preferred courses, you can fill in the Course Ranking form and attach it to your application (on any blank field) instead. [Source: https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf]\n\nCourse Finder on the Study Abroad website may be displaying courses offered in the previous academic year and so you may find there are differences between the courses listed there and those available to select in your online application. If the course offering changes after you have submitted your online application the Visiting Student Office will be in contact to advise you. [Source: https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf]\n\nYou may also wish to use PATH to help you build a timetable and see which courses fit together. HOWEVER please note that not all courses shown on PATH are available to visiting students – this is only to be used as a timetabling tool. Timetables for 2026/27 will be updated on PATH closer to the start of the semester. [Source: https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf]",
+    "additional_requirements": {
+      "extracted_notes": [
+        {
+          "requirement": "You must take the majority of your classes (40 out of 60) credits in the College of your choice – please keep this in mind when ranking your selection.",
+          "source_url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf"
+        },
+        {
+          "requirement": "You should only refer to the Course Finder to search courses available to our incoming visiting students.",
+          "source_url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf"
+        }
+      ],
+      "manual_sources": [
+        {
+          "title": "Course Ranking Form 2026/27",
+          "source_types": [
+            "course_catalog"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/course_ranking_edinburgh_2026-27.docx"
+        },
+        {
+          "title": "Visiting Student Application Guide 2026/27",
+          "source_types": [
+            "application_guide"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/Visiting Student Application Guide 202627.pdf"
+        },
+        {
+          "title": "수학보고서_Edin",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_Edin.doc"
+        },
+        {
+          "title": "수학보고서_edinburgh",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_edinburgh.doc"
+        },
+        {
+          "title": "수학보고서_ExchangeStudentReport4",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_ExchangeStudentReport4.doc"
+        },
+        {
+          "title": "수학보고서_miyoun19",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_miyoun19.doc"
+        },
+        {
+          "title": "수학보고서_UniversityofEdinburghSAF",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_UniversityofEdinburghSAF.doc"
+        },
+        {
+          "title": "수학보고서_UoE",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_UoE.doc"
+        },
+        {
+          "title": "수학보고서_YoungIn",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_YoungIn.doc"
+        },
+        {
+          "title": "수학보고서_수학보고서 김대근 (바이오메카트로닉스)",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_edinburgh/manual sources/inbox/수학보고서_수학보고서 김대근 (바이오메카트로닉스).doc"
+        }
+      ]
+    },
+    "course_restrictions": [
+      "{'restriction': 'Exchange students are eligible to enrol in any courses from the 1000-5000 level. Courses with restrictions or pre-requisites listed will require additional permissions in order to enrol. Courses offered through the McIntire School of Commerce are all restricted unless the course description states that it is open to non-Commerce school students.', 'source_url': 'https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf'}"
+    ],
+    "verification_status": "partial",
+    "verified_at": null
+  },
+  "application_deadlines": [
+    {
+      "semester": "Full academic year",
+      "deadline_type": "application deadline",
+      "deadline_date": null,
+      "deadline_text": "Check the Dates for your Diary section on the Study Abroad website for specific deadlines.",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "semester": "Semester 1 (Autumn)",
+      "deadline_type": "application deadline",
+      "deadline_date": null,
+      "deadline_text": "Check the Dates for your Diary section on the Study Abroad website for specific deadlines.",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "semester": "Semester 2 (Spring)",
+      "deadline_type": "application deadline",
+      "deadline_date": null,
+      "deadline_text": "Check the Dates for your Diary section on the Study Abroad website for specific deadlines.",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    }
+  ],
+  "language_requirements": [
+    {
+      "language": "English",
+      "test_type": "IELTS (Academic module)",
+      "overall_score": 6.5,
+      "score_details": {
+        "description": "5.5 in each component"
+      },
+      "level": "B2 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "language": "English",
+      "test_type": "TOEFL iBT (including Special Home Edition)",
+      "overall_score": 92,
+      "score_details": {
+        "description": "20 in each section (TOEFL 1-6 bands: 4.5 overall with 4.0 in each component)"
+      },
+      "level": "B2 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "language": "English",
+      "test_type": "Trinity ISE",
+      "overall_score": null,
+      "score_details": {
+        "description": "ISE II (distinction all components) / ISE III (pass all components)"
+      },
+      "level": "B2 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "language": "English",
+      "test_type": "PTE Academic (Pearsons)",
+      "overall_score": 62,
+      "score_details": {
+        "description": "54 in each component"
+      },
+      "level": "B2 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "language": "English",
+      "test_type": "Oxford ELLT (Global or Digital)",
+      "overall_score": 8,
+      "score_details": {
+        "description": "6 in each component"
+      },
+      "level": "B2 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "language": "English",
+      "test_type": "Cambridge CAE/CPE",
+      "overall_score": 176,
+      "score_details": {
+        "description": "162 component, grade A-C"
+      },
+      "level": "C1 (minimum)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    }
+  ],
+  "academic_periods": [
+    {
+      "semester": "Semester 1",
+      "period_type": "Teaching block",
+      "start_date": "2026-09-21",
+      "end_date": "2026-10-23",
+      "start_text": "Semester 1 starts / Teaching block 1 starts",
+      "end_text": "Teaching block 1 ends",
+      "notes": "Teaching block 1",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 1",
+      "period_type": "Teaching block",
+      "start_date": "2026-10-26",
+      "end_date": "2026-12-04",
+      "start_text": "Teaching block 2 starts",
+      "end_text": "Teaching block 2 ends",
+      "notes": "Teaching block 2",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 1",
+      "period_type": "Semester",
+      "start_date": "2026-09-21",
+      "end_date": "2026-12-21",
+      "start_text": "Semester 1 starts",
+      "end_text": "Semester 1 ends",
+      "notes": "Semester 1",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 1",
+      "period_type": "Winter teaching vacation",
+      "start_date": "2026-12-22",
+      "end_date": "2027-01-10",
+      "start_text": "Winter teaching vacation starts",
+      "end_text": "Winter teaching vacation ends",
+      "notes": "Winter teaching vacation",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Teaching block",
+      "start_date": "2027-01-11",
+      "end_date": "2027-02-12",
+      "start_text": "Semester 2 starts / Teaching block 3 starts",
+      "end_text": "Teaching block 3 ends",
+      "notes": "Teaching block 3",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Flexible Learning Week",
+      "start_date": "2027-02-15",
+      "end_date": "2027-02-19",
+      "start_text": "Flexible Learning Week",
+      "end_text": "Flexible Learning Week",
+      "notes": "Flexible Learning Week",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Teaching block",
+      "start_date": "2027-02-22",
+      "end_date": "2027-04-02",
+      "start_text": "Teaching block 4 starts",
+      "end_text": "Teaching block 4 ends",
+      "notes": "Teaching block 4",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Spring teaching vacation",
+      "start_date": "2027-04-05",
+      "end_date": "2027-04-16",
+      "start_text": "Spring teaching vacation",
+      "end_text": "Spring teaching vacation",
+      "notes": "Spring teaching vacation",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Semester",
+      "start_date": "2027-01-11",
+      "end_date": "2027-05-22",
+      "start_text": "Semester 2 starts",
+      "end_text": "Semester 2 ends",
+      "notes": "Semester 2",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    },
+    {
+      "semester": "Semester 2",
+      "period_type": "Summer teaching vacation",
+      "start_date": "2027-05-24",
+      "end_date": null,
+      "start_text": "Summer teaching vacation starts",
+      "end_text": "Summer teaching vacation ends",
+      "notes": "Summer teaching vacation",
+      "source_url": "https://semester-dates.ed.ac.uk/202627"
+    }
+  ],
+  "housing_options": [
+    {
+      "housing_category": "University housing",
+      "meal_type": "catered",
+      "room_type": "Large ensuite",
+      "cost_min": 14513.03,
+      "cost_max": 14513.03,
+      "currency": "GBP",
+      "billing_period": "12 September 2026 until 13 June 2027",
+      "cost_text": "£14,513.03",
+      "is_guaranteed": null,
+      "guarantee_conditions": null,
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": true,
+      "notes": "Pollock Halls, catered accommodation, 20-minute walk from Holyrood Campus",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "housing_category": "University housing",
+      "meal_type": "self-catered",
+      "room_type": "Standard ensuite",
+      "cost_min": 12129,
+      "cost_max": 12129,
+      "currency": "GBP",
+      "billing_period": "12 September 2026 until 9 July 2027",
+      "cost_text": "£12,129",
+      "is_guaranteed": null,
+      "guarantee_conditions": null,
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": false,
+      "notes": "Salisbury Court, self-catered, 20-minute walk from Holyrood Campus",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "housing_category": "University housing",
+      "meal_type": "self-catered",
+      "room_type": "Standard ensuite",
+      "cost_min": 8658.4,
+      "cost_max": 10636.68,
+      "currency": "GBP",
+      "billing_period": "12 September 2026 until 13 June 2027",
+      "cost_text": "£8,658.40 (Standard ensuite) / £10,636.68 (Large ensuite)",
+      "is_guaranteed": null,
+      "guarantee_conditions": null,
+      "application_deadline": null,
+      "application_method": null,
+      "meal_included": false,
+      "notes": "Morgan Court, self-catered, 2-minute walk from Holyrood Campus",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    }
+  ],
+  "estimated_costs": [
+    {
+      "cost_type": "accommodation cost",
+      "amount_min": 8658.4,
+      "amount_max": 14513.03,
+      "currency": "GBP",
+      "billing_period": "2026/27 academic year",
+      "reference_period": "2026/27",
+      "original_text": "£14,513.03 (John Burnett House) / £12,129 (Salisbury Court) / £8,658.40 (Morgan Court Standard ensuite) / £10,636.68 (Morgan Court Large ensuite)",
+      "notes": "Indicative costs for 2026/27 academic year from University of Edinburgh accommodation options",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    }
+  ],
+  "required_documents": [
+    {
+      "document_type": "Official academic transcript",
+      "document_name": "Official academic transcript",
+      "is_required": true,
+      "preparation_stage": "At point of application",
+      "submission_method": "Upload to online application",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "document_type": "Personal statement",
+      "document_name": "Personal statement",
+      "is_required": true,
+      "preparation_stage": "At point of application",
+      "submission_method": "Upload to online application",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "document_type": "Course Ranking form",
+      "document_name": "Course Ranking form",
+      "is_required": true,
+      "preparation_stage": "At point of application",
+      "submission_method": "Upload to online application",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "document_type": "Valid English language certificate (if applicable)",
+      "document_name": "Valid English language certificate",
+      "is_required": true,
+      "preparation_stage": "At point of application",
+      "submission_method": "Upload to online application",
+      "language": "English",
+      "notes": null,
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    }
+  ],
+  "source_links": [
+    {
+      "source_type": "academic_calendar",
+      "title": "Academic year 2026/27 - Semester Dates",
+      "url": "https://semester-dates.ed.ac.uk/202627",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Application guide and supporting document checklist | Study abroad ...",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "[PDF] University of Virginia, USA",
+      "url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "[PDF] Visiting Student 2026 Application Guide /27 - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "housing",
+      "title": "Accommodation | International Foundation Programme",
+      "url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Study abroad programmes | International applicants",
+      "url": "https://www.ed.ac.uk/studying/international/applying/visiting-students",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contact us | International applicants - The University of Edinburgh",
+      "url": "https://www.ed.ac.uk/studying/international/contact-us",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Study Abroad programme - Edinburgh Global",
+      "url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-13",
+      "notes": null
+    }
+  ],
+  "unverified_items": [
+    {
+      "category": "quota",
+      "field_name": "quota",
+      "reason": "not_found_in_official_sources",
+      "details": "No specific quota information provided in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "minimum_gpa",
+      "field_name": "minimum_gpa",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum GPA requirement specified in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "minimum_year_level",
+      "field_name": "minimum_year_level",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum year level requirement specified in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "tuition_waived",
+      "field_name": "tuition_waived",
+      "reason": "not_found_in_official_sources",
+      "details": "Tuition waiver status not specified in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "course_restrictions",
+      "field_name": "course_restrictions",
+      "reason": "not_found_in_official_sources",
+      "details": "No specific course restrictions mentioned in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "additional_requirements",
+      "field_name": "additional_requirements",
+      "reason": "not_found_in_official_sources",
+      "details": "Specific additional requirements beyond transcript and personal statement not detailed in official sources",
+      "source_url": "https://edinburgh-global.ed.ac.uk/sites/default/files/2026-03/Visiting%20Student%20Application%20Guide%202026-27.pdf"
+    },
+    {
+      "category": "application_deadlines",
+      "field_name": "deadline_date",
+      "reason": "not_found_in_official_sources",
+      "details": "Exact deadline dates for 2026/27 are not specified in the official sources; only general guidance to check the Dates for your Diary section.",
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "category": "language_requirements",
+      "field_name": "level",
+      "reason": "ambiguous",
+      "details": "While the document states minimum requirements, the specific CEFR level for each test is not explicitly stated in the official sources.",
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/study-options/study-abroad-overview"
+    },
+    {
+      "category": "required_documents",
+      "field_name": "preparation_stage",
+      "reason": "only_in_unofficial_sources",
+      "details": "The preparation stage information is not explicitly stated in the official sources; it is inferred from the context of the application process.",
+      "source_url": "https://edinburgh-global.ed.ac.uk/study-abroad/how-to-apply/application-guide"
+    },
+    {
+      "category": "course_restrictions",
+      "field_name": "course_restrictions",
+      "reason": "only_in_unofficial_sources",
+      "details": "Course restrictions information is from University of Virginia fact sheet (PDF) which is a partner university document, not University of Edinburgh official source.",
+      "source_url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf"
+    },
+    {
+      "category": "additional_requirements",
+      "field_name": "additional_requirements",
+      "reason": "only_in_unofficial_sources",
+      "details": "Additional requirements information is from University of Virginia fact sheet (PDF) which is a partner university document, not University of Edinburgh official source.",
+      "source_url": "https://edwebcontent.ed.ac.uk/sites/default/files/atoms/files/23.24_pgn_virginia_1.pdf"
+    },
+    {
+      "category": "student_life",
+      "field_name": "application_deadline",
+      "reason": "not_found_in_official_sources",
+      "details": "No official information found regarding application deadlines for housing options in the 2026/27 academic year.",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "category": "student_life",
+      "field_name": "application_method",
+      "reason": "not_found_in_official_sources",
+      "details": "No official information found regarding application methods for housing options in the 2026/27 academic year.",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "category": "student_life",
+      "field_name": "guarantee_conditions",
+      "reason": "not_found_in_official_sources",
+      "details": "No official information found regarding guarantee conditions for housing options in the 2026/27 academic year.",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "category": "student_life",
+      "field_name": "is_guaranteed",
+      "reason": "not_found_in_official_sources",
+      "details": "No official information found regarding whether housing options are guaranteed in the 2026/27 academic year.",
+      "source_url": "https://cahss.ed.ac.uk/international-and-study-abroad/foundation-programme/applying-for-ifp/accommodation"
+    },
+    {
+      "category": "student_life",
+      "field_name": "accommodation_cost",
+      "reason": "only_in_unofficial_sources",
+      "details": "Various student reports mention accommodation costs ranging from £2545 to £3000 per semester, but these are individual experiences and not official university pricing.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "visa_requirements",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports indicate varying visa requirements and procedures, with some mentioning no visa needed for stays under 6 months and others mentioning student visa requirements.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "academic_calendar",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports mention semester start dates ranging from January to February and end dates from May to June, but these vary by year and student.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "course_selection_process",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports describe course selection processes through SAF or direct email with the university, but official procedures may differ.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "credit_transfer_system",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports mention credit transfer processes and requirements, but official credit transfer policies are not detailed in the provided documents.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "international_student_support",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports mention support from Visiting Student Advisers and personal tutors, but official support structures and contact details are not fully detailed.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "transportation_options",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports mention various transportation methods including airport buses, taxis, and Airlink, but official transportation guidance is not provided.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "weather_conditions",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports describe Edinburgh's weather as cold with variable conditions, but official climate information is not provided.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "cultural_activities",
+      "reason": "only_in_unofficial_sources",
+      "details": "Student reports mention various cultural activities including Highland tours, Scottish traditional dance, and innovative learning weeks, but official activity listings are not provided.",
+      "source_url": null
+    }
+  ]
+}

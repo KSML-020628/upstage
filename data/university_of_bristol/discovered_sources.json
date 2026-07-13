@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "University of Bristol",
+  "official_domain": "bristol.ac.uk",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-11T18:15:58.983548+00:00",
+  "provider": "fixture",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Academic and English language entry requirements for incoming Study Abroad students.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "Contacts | International students",
+      "url": "https://www.bristol.ac.uk/international/contact/",
+      "description": "Contact the International Office and Centre for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" international office contact"
+    },
+    "fact_sheet": {
+      "source_type": "fact_sheet",
+      "title": "Study Abroad at Bristol 2026/27",
+      "url": "https://www.bristol.ac.uk/media-library/sites/centre-for-study-abroad/documents/UoB_Centre_for_Study_Abroad_Guide_2026-27_Accessible.pdf",
+      "description": "Official Study Abroad guide and fact sheet for 2026/27.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 85,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    "academic_calendar": {
+      "source_type": "academic_calendar",
+      "title": "University key dates calendar",
+      "url": "https://www.bristol.ac.uk/university/dates/",
+      "description": "Academic year and term dates for 2026/27.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:bristol.ac.uk academic calendar term dates \"2026/27\""
+    },
+    "course_catalog": null,
+    "housing": {
+      "source_type": "housing",
+      "title": "Study Abroad accommodation",
+      "url": "https://www.bristol.ac.uk/accommodation/study-abroad/",
+      "description": "Accommodation, tenancy dates and housing costs for Study Abroad students.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:bristol.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    "language_requirement": {
+      "source_type": "language_requirement",
+      "title": "Profile H - Inbound Study Abroad",
+      "url": "https://www.bristol.ac.uk/study/language-requirements/profile-h/",
+      "description": "English language requirements including IELTS and TOEFL for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:bristol.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    "application_guide": {
+      "source_type": "application_guide",
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Application and entry requirements for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:bristol.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    }
+  },
+  "candidates": [
+    {
+      "source_type": "academic_calendar",
+      "title": "University key dates calendar",
+      "url": "https://www.bristol.ac.uk/university/dates/",
+      "description": "Academic year and term dates for 2026/27.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 60,
+      "discovery_query": "site:bristol.ac.uk academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Application and entry requirements for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:bristol.ac.uk incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "fact_sheet",
+      "title": "Study Abroad at Bristol 2026/27",
+      "url": "https://www.bristol.ac.uk/media-library/sites/centre-for-study-abroad/documents/UoB_Centre_for_Study_Abroad_Guide_2026-27_Accessible.pdf",
+      "description": "Official Study Abroad guide and fact sheet for 2026/27.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 85,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" exchange fact sheet study abroad guide \"2026/27\""
+    },
+    {
+      "source_type": "housing",
+      "title": "Study Abroad accommodation",
+      "url": "https://www.bristol.ac.uk/accommodation/study-abroad/",
+      "description": "Accommodation, tenancy dates and housing costs for Study Abroad students.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:bristol.ac.uk study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Entry requirements | Centre for Study Abroad",
+      "url": "https://www.bristol.ac.uk/centre-for-study-abroad/inbound/study-abroad-programmes-at-bristol/entry-requirements/",
+      "description": "Academic and English language entry requirements for incoming Study Abroad students.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Contacts | International students",
+      "url": "https://www.bristol.ac.uk/international/contact/",
+      "description": "Contact the International Office and Centre for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:bristol.ac.uk \"University of Bristol\" international office contact"
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "Profile H - Inbound Study Abroad",
+      "url": "https://www.bristol.ac.uk/study/language-requirements/profile-h/",
+      "description": "English language requirements including IELTS and TOEFL for Study Abroad.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 65,
+      "discovery_query": "site:bristol.ac.uk study abroad English language requirements IELTS TOEFL \"2026/27\""
+    }
+  ]
+}

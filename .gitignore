@@ -1,0 +1,23 @@
+# 로그인 후 직접 받은 원본/내부 자료는 Git에 올리지 않는다.
+data/*/manual_sources/inbox/*
+data/*/manual sources/inbox/*
+
+# API로 생성되는 대용량 파싱 결과
+data/*/parsed_documents/*
+data/*/extraction_runs/*
+
+__pycache__/
+.env
+.env.*
+!.env.example
+web/.env
+web/.env.*
+!web/.env.example
+web/.next/
+web/dist/
+web/node_modules/
+web/.wrangler/
+.venv/
+.pytest_cache/
+*.log
+*.pyc

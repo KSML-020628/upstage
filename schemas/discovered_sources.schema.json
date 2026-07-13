@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skku-exchange.local/schemas/discovered-sources.schema.json",
+  "title": "Discovered University Sources",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "university_name",
+    "official_domain",
+    "academic_year",
+    "discovered_at",
+    "provider",
+    "primary_sources",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "university_name": {"type": "string", "minLength": 1},
+    "official_domain": {"type": "string", "minLength": 1},
+    "academic_year": {"type": ["string", "null"]},
+    "discovered_at": {"type": "string", "format": "date-time"},
+    "provider": {"enum": ["firecrawl", "fixture"]},
+    "primary_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {"$ref": "#/$defs/candidate"},
+          {"type": "null"}
+        ]
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate"}
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "title",
+        "url",
+        "description",
+        "is_official",
+        "is_pdf",
+        "score",
+        "discovery_query"
+      ],
+      "properties": {
+        "source_type": {"type": "string", "minLength": 1},
+        "title": {"type": "string"},
+        "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "description": {"type": "string"},
+        "is_official": {"type": "boolean"},
+        "is_pdf": {"type": "boolean"},
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "discovery_query": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

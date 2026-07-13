@@ -1,0 +1,10 @@
+{
+  "university_name": "Example University",
+  "slug": "example_university",
+  "official_domain": "example.edu",
+  "academic_year": "2026/27",
+  "program_name": "Study Abroad",
+  "search_limit": 3,
+  "solar_model": "solar-pro3",
+  "manual_dir": "data/example_university/manual_sources/inbox"
+}

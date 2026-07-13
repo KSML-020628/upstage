@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "University of Bristol",
+  "started_at": "2026-07-11T19:39:34.172490+00:00",
+  "completed_at": "2026-07-11T19:39:36.238044+00:00",
+  "status": "completed",
+  "stages": {
+    "save": {
+      "status": "already_complete",
+      "row_counts": {
+        "application_deadlines": 2,
+        "language_requirements": 10,
+        "academic_periods": 3,
+        "housing_options": 84,
+        "estimated_costs": 2,
+        "required_documents": 5,
+        "source_links": 7
+      }
+    },
+    "inspect": {
+      "status": "completed",
+      "exists": true,
+      "university_id": "540f47d6-098c-4fe9-9e9d-bba8d88e25b1",
+      "exchange_program_id": "b6393920-0d76-43f9-ae10-c369ba40c2db",
+      "row_counts": {
+        "application_deadlines": 2,
+        "language_requirements": 10,
+        "academic_periods": 3,
+        "housing_options": 84,
+        "estimated_costs": 2,
+        "required_documents": 5,
+        "source_links": 7
+      }
+    }
+  },
+  "artifacts": {
+    "discovery": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_bristol/discovered_sources.live.json",
+    "manifest": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_bristol/parsed_documents/manifest.json",
+    "generated": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_bristol/bristol.standard.generated.json",
+    "cleaned": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_bristol/bristol.standard.cleaned.json",
+    "quality_report": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/university_of_bristol/quality_report.json"
+  }
+}

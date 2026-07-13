@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "checked_at": "2026-07-12T15:23:12.191834+00:00",
+  "valid_schema": true,
+  "passed": true,
+  "summary": {
+    "errors": 0,
+    "warnings": 4,
+    "auto_fixed": 3,
+    "counts_before": {
+      "application_deadlines": 3,
+      "language_requirements": 6,
+      "academic_periods": 10,
+      "housing_options": 3,
+      "estimated_costs": 1,
+      "required_documents": 4,
+      "source_links": 8,
+      "unverified_items": 24
+    },
+    "counts_after": {
+      "application_deadlines": 3,
+      "language_requirements": 6,
+      "academic_periods": 10,
+      "housing_options": 3,
+      "estimated_costs": 1,
+      "required_documents": 4,
+      "source_links": 8,
+      "unverified_items": 24
+    }
+  },
+  "issues": [
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.0.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.1.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "unsupported_housing_guarantee_false",
+      "path": "housing_options.2.is_guaranteed",
+      "message": "보장 불가를 뒷받침하는 조건 설명이 없어 false를 null로 변경했습니다.",
+      "fixed": true
+    },
+    {
+      "level": "warning",
+      "code": "many_unverified_items",
+      "path": "unverified_items",
+      "message": "미확인 항목이 24개입니다. 사람 검수 시 우선 확인하세요.",
+      "fixed": false
+    }
+  ]
+}

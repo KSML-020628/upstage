@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "ICN Business School",
+  "started_at": "2026-07-13T15:03:38.745317+00:00",
+  "completed_at": "2026-07-13T15:03:38.907011+00:00",
+  "status": "completed",
+  "stages": {
+    "extract": {
+      "status": "completed",
+      "run_id": "a2b267ccbb58"
+    },
+    "quality": {
+      "status": "completed",
+      "errors": 0,
+      "warnings": 0,
+      "auto_fixed": 0,
+      "counts_before": {
+        "application_deadlines": 2,
+        "language_requirements": 1,
+        "academic_periods": 3,
+        "housing_options": 0,
+        "estimated_costs": 0,
+        "required_documents": 2,
+        "source_links": 2,
+        "unverified_items": 16
+      },
+      "counts_after": {
+        "application_deadlines": 2,
+        "language_requirements": 1,
+        "academic_periods": 3,
+        "housing_options": 0,
+        "estimated_costs": 0,
+        "required_documents": 2,
+        "source_links": 2,
+        "unverified_items": 16
+      }
+    }
+  },
+  "artifacts": {
+    "discovery": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/discovered_sources.live.json",
+    "manifest": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/parsed_documents/manifest.json",
+    "generated": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/standard.generated.json",
+    "cleaned": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/standard.cleaned.json",
+    "quality_report": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICN Business School/quality_report.json"
+  }
+}

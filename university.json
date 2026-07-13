@@ -1,0 +1,113 @@
+{
+  "문서명": "Study Abroad at Bristol 2026/27",
+  "발행기관명": "University of Bristol",
+  "운영부서명": "Centre for Study Abroad",
+  "학년도": "2026/27",
+  "프로그램명": "Study Abroad",
+  "대학명": "University of Bristol",
+  "학습테마설명": "Bristol-inspired study themes enable students to explore a common subject from multiple academic perspectives.",
+  "숙소비용기준설명": "Typical accommodation fees based on 2025/26 figures and may vary depending on semester.",
+  "사설숙소_월임대료범위": "between £500 and £800 or more in monthly rent, not including your bills",
+  "스튜디오_월임대료상한": "up to £1,500 per month",
+  "등록금면제대상설명": "Students nominated through an exchange partnership do not need to pay tuition fees.",
+  "장학금안내설명": "Students are encouraged to ask their home university about available scholarships.",
+  "생활비안내링크": "bristol.ac.uk/living-expenses",
+  "학업기간_학기별일정": [
+    {
+      "기간유형": "Autumn semester",
+      "시작연월": "September 2026",
+      "종료연월": "December 2026"
+    },
+    {
+      "기간유형": "Spring semester",
+      "시작연월": "January 2027",
+      "종료연월": "May 2027"
+    },
+    {
+      "기간유형": "Full academic year",
+      "시작연월": "September 2026",
+      "종료연월": "May 2027"
+    }
+  ],
+  "프로그램목록": [
+    {
+      "프로그램세부명": "Study Abroad (General pathway)",
+      "시작시기": "September and January start",
+      "프로그램설명": "Students can choose units from across the University."
+    },
+    {
+      "프로그램세부명": "Study Abroad (Subject pathway)",
+      "시작시기": "September and January start",
+      "프로그램설명": "Students take the majority of units in their host department."
+    },
+    {
+      "프로그램세부명": "STABEL (Study Abroad with English Language)",
+      "시작시기": "September start",
+      "프로그램설명": "Study Abroad combined with a pre-sessional English language course."
+    }
+  ],
+  "주거비용표": [
+    {
+      "숙소유형_상위": "Self-catered",
+      "객실유형": "Twin (shared) room",
+      "비용범위": "£1,709 to £2,806"
+    },
+    {
+      "숙소유형_상위": "Self-catered",
+      "객실유형": "Single room",
+      "비용범위": "£1,963 to £5,184"
+    },
+    {
+      "숙소유형_상위": "Self-catered",
+      "객실유형": "En suite room",
+      "비용범위": "£2,935 to £5,845"
+    },
+    {
+      "숙소유형_상위": "Catered",
+      "객실유형": "Twin (shared) room",
+      "비용범위": "£2,683 to £4,365"
+    },
+    {
+      "숙소유형_상위": "Catered",
+      "객실유형": "Single room",
+      "비용범위": "£2,949 to £5,640"
+    },
+    {
+      "숙소유형_상위": "Catered",
+      "객실유형": "En suite room",
+      "비용범위": "£3,745 to £6,317"
+    }
+  ],
+  "숙소보장정책": [
+    {
+      "지원자유형": "Direct-enrol (non-exchange) students",
+      "보장조건및내용": "September or January entrants are guaranteed an offer if they apply by the deadline."
+    },
+    {
+      "지원자유형": "Exchange students",
+      "보장조건및내용": "September entrants are guaranteed an offer if they apply by the deadline; January entry is not guaranteed."
+    }
+  ],
+  "등록금정보": [
+    {
+      "요금구분_상위": "2026/27 Study Abroad tuition fees",
+      "요금항목": "Full year",
+      "금액": "£22,315"
+    },
+    {
+      "요금구분_상위": "2026/27 Study Abroad tuition fees",
+      "요금항목": "One semester",
+      "금액": "£11,475"
+    },
+    {
+      "요금구분_상위": "Study Abroad with English Language (STABEL)",
+      "요금항목": "Six weeks",
+      "금액": "£3,610 + Study Abroad tuition fee"
+    },
+    {
+      "요금구분_상위": "Study Abroad with English Language (STABEL)",
+      "요금항목": "Ten weeks",
+      "금액": "£5,910 + Study Abroad tuition fee"
+    }
+  ]
+}

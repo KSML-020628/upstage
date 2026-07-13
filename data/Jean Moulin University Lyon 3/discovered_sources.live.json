@@ -1,0 +1,233 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "Jean Moulin University Lyon 3",
+  "official_domain": "univ-lyon3.fr",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-13T14:58:16.663554+00:00",
+  "provider": "firecrawl",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "French Summer School - Université Jean Moulin Lyon ...",
+      "url": "https://www.univ-lyon3.fr/french-summer-school",
+      "description": "Students will be accommodated in a partner student residence, located near Jean Moulin University Lyon 3. ... incoming@univ-lyon3.fr. What ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "Department of Anglophone Studies",
+      "url": "https://facdeslangues.univ-lyon3.fr/anglophone-studies",
+      "description": "The teaching and exams of the Department of Anglophone Studies at Jean Moulin University (Lyon 3) are administered by the Faculty of Languages.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" international office contact"
+    },
+    "fact_sheet": null,
+    "academic_calendar": {
+      "source_type": "academic_calendar",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Course Offering - Fall Semester 2026/2027. ▻ Timetable Fall Semester 2026-27 (new!) ▻ Integration Week Schedule (Fall Semester 26-27) BUSINESS & BUSINESS ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr academic calendar term dates \"2026/27\""
+    },
+    "course_catalog": {
+      "source_type": "course_catalog",
+      "title": "Exchange Students - Université Jean Moulin Lyon ...",
+      "url": "https://www.univ-lyon3.fr/exchange-students",
+      "description": "This program is offered to Bachelor and Masters students coming to study at Lyon 3 for a semester or a year. Check the course catalogue.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:univ-lyon3.fr course catalog catalogue exchange students"
+    },
+    "housing": {
+      "source_type": "housing",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Each semester, students can select up to 4 of the following content courses : Course Offering - Fall Semester 2026/2027. ▻ Timetable Fall Semester 2026-27 (new ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr study abroad exchange accommodation housing \"2026/27\""
+    },
+    "language_requirement": {
+      "source_type": "language_requirement",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Debates in Culture Wars (22230039) The European Renaissance (22230046). Course Offering - Spring Semester 2026/2027. ▻ Timetable Spring Semester 2026-27",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr study abroad English language requirements IELTS TOEFL \"2026/27\""
+    },
+    "application_guide": {
+      "source_type": "application_guide",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france?toPdf=true",
+      "description": "Conditions of admission / Conditions of successful application ... Timetable Spring Semester 2026-27. Orientation Week Spring Semester 2026-2027.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:univ-lyon3.fr incoming exchange application deadline nomination requirements \"2026/27\""
+    }
+  },
+  "candidates": [
+    {
+      "source_type": "academic_calendar",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Course Offering - Fall Semester 2026/2027. ▻ Timetable Fall Semester 2026-27 (new!) ▻ Integration Week Schedule (Fall Semester 26-27) BUSINESS & BUSINESS ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france?toPdf=true",
+      "description": "Course Offering - Fall Semester 2026/2027. Timetable Fall Semester 2026-27 (new!) Integration Week Schedule (Fall Semester 26-27). BUSINESS & BUSINESS CULTURE.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "academic_calendar",
+      "title": "Student enrolment process - Jean Moulin Lyon 3 University",
+      "url": "https://www.univ-lyon3.fr/student-enrolment-process",
+      "description": "Your university calendar: pre-term start date, class start dates, holidays, etc. → Download the 2026-27 university calendar (in Frecnh) → ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr academic calendar term dates \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france?toPdf=true",
+      "description": "Conditions of admission / Conditions of successful application ... Timetable Spring Semester 2026-27. Orientation Week Spring Semester 2026-2027.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 50,
+      "discovery_query": "site:univ-lyon3.fr incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "Candidater et s'inscrire en doctorat",
+      "url": "https://www.univ-lyon3.fr/candidater-et-sinscrire-en-doctorat",
+      "description": "Calendrier 2026-27 : se connecter au Portail inscription de l'Université pour effectuer son inscription administrative et régler les droits ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "application_guide",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "The SELF program is available to students (exchange/non-exchange) who fulfil the following requirements: ... ▻ Timetable Fall Semester 2026-27 (new!) ▻ ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr incoming exchange application deadline nomination requirements \"2026/27\""
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Exchange Students - Université Jean Moulin Lyon ...",
+      "url": "https://www.univ-lyon3.fr/exchange-students",
+      "description": "This program is offered to Bachelor and Masters students coming to study at Lyon 3 for a semester or a year. Check the course catalogue.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 55,
+      "discovery_query": "site:univ-lyon3.fr course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Exchange students - iaelyon School of Management",
+      "url": "https://iae.univ-lyon3.fr/exchange-students-1",
+      "description": "How to register for a course? You will receive a catalogue listing available courses and a blank Wishlist template from iaelyon.incoming ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Catalogue Cours MÃ€J 2023",
+      "url": "https://www.univ-lyon3.fr/catalogue-cours-benelux-et-pays-nordiques",
+      "description": "https://www.oru.se/english/study/exchange-studies/courses-for-exchange-students/course-catalogue-for-exchange-students/. Stockholm University. Droit https ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "housing",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Each semester, students can select up to 4 of the following content courses : Course Offering - Fall Semester 2026/2027. ▻ Timetable Fall Semester 2026-27 (new ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr study abroad exchange accommodation housing \"2026/27\""
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "French Summer School - Université Jean Moulin Lyon ...",
+      "url": "https://www.univ-lyon3.fr/french-summer-school",
+      "description": "Students will be accommodated in a partner student residence, located near Jean Moulin University Lyon 3. ... incoming@univ-lyon3.fr. What ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Department of Anglophone Studies",
+      "url": "https://facdeslangues.univ-lyon3.fr/anglophone-studies",
+      "description": "The teaching and exams of the Department of Anglophone Studies at Jean Moulin University (Lyon 3) are administered by the Faculty of Languages.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "International Cooperation: a fruitful meeting with Shanghai ...",
+      "url": "https://iae.univ-lyon3.fr/international-cooperation-a-fruitful-meeting-with-shanghai-university",
+      "description": "New areas of cooperation with Shanghai University, partner of Jean Moulin University Lyon 3 since 2014, were discussed.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "French Summer School - Université Jean Moulin Lyon ...",
+      "url": "https://www.univ-lyon3.fr/french-summer-school",
+      "description": "Students will be accommodated in a partner student residence, located near Jean Moulin University Lyon 3. ... International Relations Department.",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:univ-lyon3.fr \"Jean Moulin University Lyon 3\" international office contact"
+    },
+    {
+      "source_type": "language_requirement",
+      "title": "SELF | Study in English in Lyon, France",
+      "url": "https://www.univ-lyon3.fr/self-study-in-english-in-lyon-france",
+      "description": "Debates in Culture Wars (22230039) The European Renaissance (22230046). Course Offering - Spring Semester 2026/2027. ▻ Timetable Spring Semester 2026-27",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 40,
+      "discovery_query": "site:univ-lyon3.fr study abroad English language requirements IELTS TOEFL \"2026/27\""
+    }
+  ]
+}

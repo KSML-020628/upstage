@@ -1,0 +1,10 @@
+{
+  "university_name": "University of Edinburgh",
+  "slug": "university_of_edinburgh",
+  "official_domain": "ed.ac.uk",
+  "academic_year": "2026/27",
+  "program_name": "International Exchange",
+  "search_limit": 3,
+  "solar_model": "solar-pro3",
+  "manual_dir": "data/university_of_edinburgh/manual sources/inbox"
+}

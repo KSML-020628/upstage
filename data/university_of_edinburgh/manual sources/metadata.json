@@ -1,0 +1,24 @@
+{
+  "documents": [
+    {
+      "file_name": "course_ranking_edinburgh_2026-27.docx",
+      "title": "Course Ranking Form 2026/27",
+      "source_type": "course_catalog",
+      "academic_year": "2026/27",
+      "is_official": true,
+      "access_type": "manual_download",
+      "requires_login": false,
+      "notes": "Official course preference form submitted with the visiting student application."
+    },
+    {
+      "file_name": "Visiting Student Application Guide 202627.pdf",
+      "title": "Visiting Student Application Guide 2026/27",
+      "source_type": "application_guide",
+      "academic_year": "2026/27",
+      "is_official": true,
+      "access_type": "manual_download",
+      "requires_login": false,
+      "notes": "Official step-by-step application guide; not a fact sheet."
+    }
+  ]
+}

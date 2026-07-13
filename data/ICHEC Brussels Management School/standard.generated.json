@@ -1,0 +1,437 @@
+{
+  "schema_version": "1.0.0",
+  "research_date": "2026-07-14",
+  "university": {
+    "university_name": "ICHEC Brussels Management School",
+    "country": "Belgium",
+    "city": "Brussels",
+    "official_website_url": "https://www.ichec.be",
+    "international_office_url": "https://www.ichec.be/en/inward-exchanges",
+    "incoming_exchange_url": "https://www.ichec.be/en/inward-exchanges",
+    "summary": "ICHEC Brussels Management School is a leading business school in Brussels with a strong international network, offering exchange programs for students from partner universities. The school emphasizes global outlook, academic excellence, and sustainable development, with two campuses located in the heart of Brussels. Exchange students are welcomed to participate in various student associations and cultural activities.",
+    "strengths": [
+      "ICHEC is a member of prestigious academic networks including AACSB, CLADEA, EFMD, CFA, Conférence des HEC francophones, NIBES, and Pôle Louvain. It has over 3000 students from 60 nationalities and 10,000 alumni. The school offers a wide range of management programs in French and English, with a focus on sustainable development and business ethics. Exchange students can benefit from the school's strong network of international organizations and companies in Brussels."
+    ],
+    "facilities": [
+      "ICHEC has two campuses in downtown Brussels: Montgomery Campus (Boulevard Brand Whitlock, 2, 1150 Brussels) and Anjou Campus (Rue au Bois, 365A, 1150 Brussels). The Montgomery Campus houses the library and a new cafeteria. The Anjou Campus is located in a green area near a Sport Center and is where the International Office is situated. The school offers weekly French lessons at beginner, intermediate, and advanced levels."
+    ],
+    "student_life": [
+      "Student life at ICHEC is rich with many active student associations covering culture, sport, folklore, charity, entrepreneurship, and sustainable development. Exchange students are encouraged to join associations such as the Student Council (Conseil des Etudiants), ESN-ICHEC (Erasmus Student Network), AIESEC-ICHEC, OIKOS, CICHEC, and ICHEC Junior Consult. The ESN-ICHEC offers support for administrative and academic procedures, organizes festive and cultural events, and creates WhatsApp groups for incoming students. The CICHEC offers job services and various social events including Miss ICHEC, Welcome night, ICHEC Ball, and D100 Party."
+    ],
+    "local_life": [
+      "Brussels is located at the heart of Europe, close to European Union administrations and international organizations. The city is the center of a wide European market with excellent transportation connections to Paris, London, Köln, and Amsterdam. Brussels is home to the European Commission and NATO institutions, and hosts over a thousand international companies. The city is known for its rich architectural heritage (e.g., medieval Bruges) and cultural traditions, including folk festivals in Ghent. Belgian gastronomy is diverse, with special Belgian beers being among the best in the world. Brussels is divided into 19 communes, with recommended areas for accommodation including residential areas (1140 Evere, 1200 Woluwe-Saint-Lambert, 1150 Woluwe-Saint-Pierre, 1160 Auderghem, 1170 Watermael-Boitsfort, 1180 Uccle) and animated areas (1000 Bruxelles, 1030 Schaerbeek, 1040 Etterbeek, 1050 Ixelles)."
+    ]
+  },
+  "exchange_program": {
+    "academic_year": "2026/27",
+    "program_name": "Incoming Exchange",
+    "semester_options": [
+      "Fall (Q1)",
+      "Spring (Q2)"
+    ],
+    "exchange_type": "Incoming Exchange",
+    "application_process": "Contact International Office (exchange.in@ichec.be) for application. Learning Agreement should be sent to Mrs. Kristien Minet by June 15 (for 1st semester) and December 15 (for 2nd semester).",
+    "course_registration_notes": "Learning Agreement should be sent to Mrs. Kristien Minet at latest on June 15 (for 1st semester) and December 15 (for 2nd semester). Students can change study programme during first week of semester.",
+    "additional_requirements": {
+      "extracted_notes": "Erasmus+ students must use online EWP Learning Agreement. Non-Erasmus students can use ICHEC learning agreement template. Minimum language recommendation: B2 level in English/French depending on language of classes. Intensive week of French available before each semester (Sept 8-12, 2025 and Jan 27-31, 2026).",
+      "manual_sources": [
+        {
+          "title": "23-2_ICHEC_수학보고서_정서영",
+          "source_types": [
+            "student_report"
+          ],
+          "local_path": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/ICHEC Brussels Management School/manual sources/inbox/23-2_ICHEC_수학보고서_정서영.pdf"
+        }
+      ]
+    },
+    "course_restrictions": [
+      "All ICHEC courses are open to exchange students. Students can choose any course from BAC1 to MASTER2, in French, English, during day or evening. Complete course list available via https://www.ichec.be/en/inward-exchanges"
+    ],
+    "verification_status": "partial",
+    "verified_at": null
+  },
+  "application_deadlines": [
+    {
+      "semester": "First Semester",
+      "deadline_type": "Application Deadline",
+      "deadline_date": null,
+      "deadline_text": "June 01, 2025",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Second Semester",
+      "deadline_type": "Application Deadline",
+      "deadline_date": null,
+      "deadline_text": "November 15, 2025",
+      "timezone": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    }
+  ],
+  "language_requirements": [
+    {
+      "language": "English",
+      "test_type": null,
+      "overall_score": null,
+      "score_details": null,
+      "level": "B2 (Common European Framework of reference)",
+      "is_required": true,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "language": "French",
+      "test_type": null,
+      "overall_score": null,
+      "score_details": null,
+      "level": "B2 (Common European Framework of reference)",
+      "is_required": null,
+      "exemption_conditions": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    }
+  ],
+  "academic_periods": [
+    {
+      "semester": "Fall",
+      "period_type": "semester",
+      "start_date": "2025-09-15",
+      "end_date": "2025-12-19",
+      "start_text": "Sept 15",
+      "end_text": "Dec 19, 2025",
+      "notes": "Courses period for Fall semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Fall",
+      "period_type": "examination",
+      "start_date": "2026-01-05",
+      "end_date": "2026-01-23",
+      "start_text": "Jan 5",
+      "end_text": "Jan 23, 2026",
+      "notes": "Examination session for Fall semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Spring",
+      "period_type": "semester",
+      "start_date": "2026-02-02",
+      "end_date": "2026-05-15",
+      "start_text": "Feb 2",
+      "end_text": "May 15, 2026",
+      "notes": "Courses period for Spring semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Spring",
+      "period_type": "examination",
+      "start_date": "2026-06-01",
+      "end_date": "2026-06-20",
+      "start_text": "June 1",
+      "end_text": "June 20, 2026",
+      "notes": "Examination session for Spring semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Retakes",
+      "period_type": "examination",
+      "start_date": "2026-08-17",
+      "end_date": "2026-09-04",
+      "start_text": "Aug 17",
+      "end_text": "Sept 4, 2026",
+      "notes": "Retakes examination period",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Fall",
+      "period_type": "orientation",
+      "start_date": null,
+      "end_date": null,
+      "start_text": "first day of the semester",
+      "end_text": "first week of each semester",
+      "notes": "Orientation day on first day of semester; ESN-ICHEC welcome week during first week",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf"
+    },
+    {
+      "semester": "Fall",
+      "period_type": "intensive_week",
+      "start_date": "2025-09-08",
+      "end_date": "2025-09-12",
+      "start_text": "Sept 8",
+      "end_text": "Sept 12, 2025",
+      "notes": "Optional intensive week of French (3 ECTS, 30h/week) before Fall semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "semester": "Spring",
+      "period_type": "intensive_week",
+      "start_date": "2026-01-27",
+      "end_date": "2026-01-31",
+      "start_text": "Jan 27",
+      "end_text": "Jan 31, 2026",
+      "notes": "Optional intensive week of French (3 ECTS, 30h/week) before Spring semester",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    }
+  ],
+  "housing_options": [],
+  "estimated_costs": [],
+  "required_documents": [
+    {
+      "document_type": "Learning Agreement",
+      "document_name": "ICHEC learning agreement template",
+      "is_required": true,
+      "preparation_stage": null,
+      "submission_method": null,
+      "language": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "document_type": "Learning Agreement",
+      "document_name": "online Erasmus+ learning agreement (EWP Learning Agreement signatory for incoming students: exchange.in@ichec.be )",
+      "is_required": true,
+      "preparation_stage": null,
+      "submission_method": null,
+      "language": null,
+      "notes": null,
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    }
+  ],
+  "source_links": [
+    {
+      "source_type": "course_catalog",
+      "title": "ICHEC Brussels Management School FACT SHEET 2025",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-14",
+      "notes": null
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-14",
+      "notes": null
+    },
+    {
+      "source_type": "international_office",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "is_official": true,
+      "published_year": null,
+      "checked_at": "2026-07-14",
+      "notes": null
+    }
+  ],
+  "unverified_items": [
+    {
+      "category": "accommodation",
+      "field_name": "average monthly rent",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source mentions rent ranges of 400€-600€ per month for different areas but does not provide specific average rent values.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "student_life",
+      "field_name": "availability of student dormitories",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source states ICHEC has no on-campus student residence, but does not specify if any dormitories are available off-campus.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "visa",
+      "field_name": "visa processing time",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source mentions visa process might take more than one month but does not provide specific processing time details.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "courses",
+      "field_name": "course selection process",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source mentions learning agreement submission deadlines and course selection during first week but does not detail the specific process.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "facilities",
+      "field_name": "library facilities",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source mentions Montgomery Campus has a library but does not provide details about library facilities, hours, or resources.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "student_life",
+      "field_name": "ESN WhatsApp group creation timing",
+      "reason": "not_found_in_official_sources",
+      "details": "The official source mentions ESN ICHEC creates a WhatsApp group at the beginning of the semester but does not specify exact timing.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "local_life",
+      "field_name": "safety concerns",
+      "reason": "only_in_unofficial_sources",
+      "details": "The student report mentions recent security issues in Brussels including Palestinian-Israeli conflict, Russia-Ukraine war, immigration problems, extreme Islamist issues, and drug problems, which are not mentioned in official sources.",
+      "source_url": null
+    },
+    {
+      "category": "local_life",
+      "field_name": "accommodation cost",
+      "reason": "only_in_unofficial_sources",
+      "details": "The student report mentions specific accommodation costs (e.g., Wavre124 case) and recommendations for finding housing, which are not detailed in official sources.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "language barriers",
+      "reason": "only_in_unofficial_sources",
+      "details": "The student report mentions initial language and cultural barriers experienced by exchange students, which are not mentioned in official sources.",
+      "source_url": null
+    },
+    {
+      "category": "student_life",
+      "field_name": "academic support",
+      "reason": "only_in_unofficial_sources",
+      "details": "The student report mentions that the exchange coordinator helped connect students with good accommodations, which is not mentioned in official sources.",
+      "source_url": null
+    },
+    {
+      "category": "quota",
+      "field_name": "quota",
+      "reason": "not_found_in_official_sources",
+      "details": "No information found regarding specific quota numbers for incoming exchange students in the 2025-2026 guideline.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "minimum_gpa",
+      "field_name": "minimum_gpa",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum GPA requirement specified in the official exchange student guideline.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "minimum_year_level",
+      "field_name": "minimum_year_level",
+      "reason": "not_found_in_official_sources",
+      "details": "No minimum year level requirement specified for incoming exchange students.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "tuition_waived",
+      "field_name": "tuition_waived",
+      "reason": "not_found_in_official_sources",
+      "details": "No explicit information about tuition waiver status for exchange students.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "student_count",
+      "field_name": "student_count",
+      "reason": "not_found_in_official_sources",
+      "details": "Total student count not specified in the document.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "international_student_count",
+      "field_name": "international_student_count",
+      "reason": "not_found_in_official_sources",
+      "details": "Number of international students not specified in the document.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "latitude",
+      "field_name": "latitude",
+      "reason": "not_found_in_official_sources",
+      "details": "Geographic coordinates not provided in the document.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "longitude",
+      "field_name": "longitude",
+      "reason": "not_found_in_official_sources",
+      "details": "Geographic coordinates not provided in the document.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "application_deadlines",
+      "field_name": "Application Deadline",
+      "reason": "not_found_in_official_sources",
+      "details": "The document is for academic year 2025-2026, but target year is 2026/27. No official source found for 2026/27 deadlines.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "language_requirements",
+      "field_name": "French language requirement",
+      "reason": "only_in_skku_material",
+      "details": "The document mentions French language classes are available but does not specify if French proficiency is required for exchange students.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "required_documents",
+      "field_name": "Learning Agreement submission method",
+      "reason": "ambiguous",
+      "details": "The document mentions learning agreement submission deadlines but does not specify the exact submission method or preparation stage.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "academic_periods",
+      "field_name": "start_date",
+      "reason": "not_found_in_official_sources",
+      "details": "The academic calendar in the document shows courses ending in 2025 and 2026, but the target academic year is 2026/27. No official source provides specific dates for 2026/27 academic periods.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf"
+    },
+    {
+      "category": "academic_periods",
+      "field_name": "end_date",
+      "reason": "not_found_in_official_sources",
+      "details": "The academic calendar in the document shows courses ending in 2025 and 2026, but the target academic year is 2026/27. No official source provides specific dates for 2026/27 academic periods.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "exchange_program_updates",
+      "field_name": "course_restrictions",
+      "reason": "only_in_unofficial_sources",
+      "details": "The restriction that 'All ICHEC courses are open to exchange students' is stated in the Practical Guide, which is an official source, but the specific claim about course selection from BAC1 to MASTER2 is not explicitly confirmed in the Fact Sheet.",
+      "source_url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf"
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "cost_min",
+      "reason": "not_found_in_official_sources",
+      "details": "Student report mentions '0유로' cost but this appears to be a placeholder or error in the document. No specific cost range provided.",
+      "source_url": null
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "cost_max",
+      "reason": "not_found_in_official_sources",
+      "details": "No maximum cost specified in student report. Only mentions '0유로' which seems to be placeholder.",
+      "source_url": null
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "currency",
+      "reason": "not_found_in_official_sources",
+      "details": "Student report shows '0유로' but no actual currency amounts provided for housing costs.",
+      "source_url": null
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "billing_period",
+      "reason": "not_found_in_official_sources",
+      "details": "Student report mentions cost per month but no specific billing period details.",
+      "source_url": null
+    },
+    {
+      "category": "housing_costs",
+      "field_name": "is_guaranteed",
+      "reason": "only_in_skku_material",
+      "details": "Student report states university does not provide dormitory, housing must be arranged independently through real estate sites. No official guarantee mentioned.",
+      "source_url": null
+    }
+  ]
+}

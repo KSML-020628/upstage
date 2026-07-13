@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skku-exchange.local/schemas/university-research.schema.json",
+  "title": "SKKU Exchange University Research",
+  "description": "해외 교환대학 조사 결과를 Supabase에 적재하기 위한 표준 JSON 계약",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "research_date",
+    "university",
+    "exchange_program",
+    "application_deadlines",
+    "language_requirements",
+    "academic_periods",
+    "housing_options",
+    "estimated_costs",
+    "required_documents",
+    "source_links",
+    "unverified_items"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "research_date": {"$ref": "#/$defs/date"},
+    "university": {"$ref": "#/$defs/university"},
+    "exchange_program": {"$ref": "#/$defs/exchangeProgram"},
+    "application_deadlines": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/applicationDeadline"}
+    },
+    "language_requirements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/languageRequirement"}
+    },
+    "academic_periods": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/academicPeriod"}
+    },
+    "housing_options": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/housingOption"}
+    },
+    "estimated_costs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/estimatedCost"}
+    },
+    "required_documents": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/requiredDocument"}
+    },
+    "source_links": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sourceLink"}
+    },
+    "unverified_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/unverifiedItem"}
+    }
+  },
+  "$defs": {
+    "nullableText": {"type": ["string", "null"]},
+    "nullableBoolean": {"type": ["boolean", "null"]},
+    "nullableNumber": {"type": ["number", "null"]},
+    "date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "nullableDate": {
+      "anyOf": [
+        {"$ref": "#/$defs/date"},
+        {"type": "null"}
+      ]
+    },
+    "nullableUrl": {
+      "anyOf": [
+        {"type": "string", "format": "uri", "pattern": "^https?://"},
+        {"type": "null"}
+      ]
+    },
+    "currency": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[A-Z]{3}$"},
+        {"type": "null"}
+      ]
+    },
+    "university": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["university_name", "country", "city"],
+      "properties": {
+        "university_name": {"type": "string", "minLength": 1},
+        "country": {"$ref": "#/$defs/nullableText"},
+        "city": {"$ref": "#/$defs/nullableText"},
+        "official_website_url": {"$ref": "#/$defs/nullableUrl"},
+        "international_office_url": {"$ref": "#/$defs/nullableUrl"},
+        "incoming_exchange_url": {"$ref": "#/$defs/nullableUrl"},
+        "latitude": {"type": ["number", "null"], "minimum": -90, "maximum": 90},
+        "longitude": {"type": ["number", "null"], "minimum": -180, "maximum": 180},
+        "student_count": {"type": ["integer", "null"], "minimum": 0},
+        "international_student_count": {"type": ["integer", "null"], "minimum": 0},
+        "summary": {"$ref": "#/$defs/nullableText"},
+        "strengths": {"type": ["array", "null"], "items": {"type": "string"}},
+        "facilities": {"type": ["array", "null"], "items": {"type": "string"}},
+        "student_life": {"type": ["array", "null"], "items": {"type": "string"}},
+        "local_life": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "exchangeProgram": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["academic_year", "program_name"],
+      "properties": {
+        "academic_year": {"type": "string", "minLength": 1},
+        "program_name": {"type": "string", "minLength": 1},
+        "semester_options": {"type": ["array", "null"], "items": {"type": "string"}},
+        "exchange_type": {"$ref": "#/$defs/nullableText"},
+        "quota": {"type": ["integer", "null"], "minimum": 0},
+        "minimum_gpa": {"$ref": "#/$defs/nullableNumber"},
+        "minimum_year_level": {"$ref": "#/$defs/nullableText"},
+        "tuition_waived": {"$ref": "#/$defs/nullableBoolean"},
+        "application_process": {"$ref": "#/$defs/nullableText"},
+        "course_registration_notes": {"$ref": "#/$defs/nullableText"},
+        "course_restrictions": {"type": ["array", "null"], "items": {"type": "string"}},
+        "additional_requirements": {"type": ["object", "null"]},
+        "document_name": {"$ref": "#/$defs/nullableText"},
+        "verification_status": {
+          "type": "string",
+          "enum": ["unverified", "partial", "verified"]
+        },
+        "verified_at": {"$ref": "#/$defs/nullableDate"}
+      }
+    },
+    "applicationDeadline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deadline_type"],
+      "properties": {
+        "semester": {"$ref": "#/$defs/nullableText"},
+        "deadline_type": {"type": "string", "minLength": 1},
+        "deadline_date": {"$ref": "#/$defs/nullableDate"},
+        "deadline_text": {"$ref": "#/$defs/nullableText"},
+        "timezone": {"$ref": "#/$defs/nullableText"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "languageRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language"],
+      "properties": {
+        "language": {"type": "string", "minLength": 1},
+        "test_type": {"$ref": "#/$defs/nullableText"},
+        "overall_score": {"$ref": "#/$defs/nullableNumber"},
+        "score_details": {"type": ["object", "null"]},
+        "level": {"$ref": "#/$defs/nullableText"},
+        "is_required": {"$ref": "#/$defs/nullableBoolean"},
+        "exemption_conditions": {"$ref": "#/$defs/nullableText"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "academicPeriod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period_type"],
+      "properties": {
+        "semester": {"$ref": "#/$defs/nullableText"},
+        "period_type": {"type": "string", "minLength": 1},
+        "start_date": {"$ref": "#/$defs/nullableDate"},
+        "end_date": {"$ref": "#/$defs/nullableDate"},
+        "start_text": {"$ref": "#/$defs/nullableText"},
+        "end_text": {"$ref": "#/$defs/nullableText"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "housingOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "housing_category": {"$ref": "#/$defs/nullableText"},
+        "meal_type": {"$ref": "#/$defs/nullableText"},
+        "room_type": {"$ref": "#/$defs/nullableText"},
+        "cost_min": {"$ref": "#/$defs/nullableNumber"},
+        "cost_max": {"$ref": "#/$defs/nullableNumber"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "billing_period": {"$ref": "#/$defs/nullableText"},
+        "cost_text": {"$ref": "#/$defs/nullableText"},
+        "is_guaranteed": {"$ref": "#/$defs/nullableBoolean"},
+        "guarantee_conditions": {"$ref": "#/$defs/nullableText"},
+        "application_deadline": {"$ref": "#/$defs/nullableDate"},
+        "application_method": {"$ref": "#/$defs/nullableText"},
+        "meal_included": {"$ref": "#/$defs/nullableBoolean"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "estimatedCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cost_type"],
+      "properties": {
+        "cost_type": {"type": "string", "minLength": 1},
+        "amount_min": {"$ref": "#/$defs/nullableNumber"},
+        "amount_max": {"$ref": "#/$defs/nullableNumber"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "billing_period": {"$ref": "#/$defs/nullableText"},
+        "reference_period": {"$ref": "#/$defs/nullableText"},
+        "original_text": {"$ref": "#/$defs/nullableText"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "requiredDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_type"],
+      "properties": {
+        "document_type": {"type": "string", "minLength": 1},
+        "document_name": {"$ref": "#/$defs/nullableText"},
+        "is_required": {"$ref": "#/$defs/nullableBoolean"},
+        "preparation_stage": {"$ref": "#/$defs/nullableText"},
+        "submission_method": {"$ref": "#/$defs/nullableText"},
+        "language": {"$ref": "#/$defs/nullableText"},
+        "notes": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    },
+    "sourceLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "url"],
+      "properties": {
+        "source_type": {"type": "string", "minLength": 1},
+        "title": {"$ref": "#/$defs/nullableText"},
+        "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "is_official": {"$ref": "#/$defs/nullableBoolean"},
+        "published_year": {"$ref": "#/$defs/nullableText"},
+        "checked_at": {"$ref": "#/$defs/nullableDate"},
+        "notes": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "unverifiedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "field_name", "reason"],
+      "properties": {
+        "category": {"type": "string", "minLength": 1},
+        "field_name": {"type": "string", "minLength": 1},
+        "reason": {
+          "type": "string",
+          "enum": [
+            "not_found_in_official_sources",
+            "not_publicly_available",
+            "only_in_skku_material",
+            "outdated_source",
+            "varies_by_department_or_semester",
+            "only_in_unofficial_sources",
+            "ambiguous"
+          ]
+        },
+        "details": {"$ref": "#/$defs/nullableText"},
+        "source_url": {"$ref": "#/$defs/nullableUrl"}
+      }
+    }
+  }
+}

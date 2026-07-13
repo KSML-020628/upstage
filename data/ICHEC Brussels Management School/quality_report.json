@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "checked_at": "2026-07-13T15:03:38.739206+00:00",
+  "valid_schema": true,
+  "passed": true,
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "auto_fixed": 0,
+    "counts_before": {
+      "application_deadlines": 2,
+      "language_requirements": 2,
+      "academic_periods": 8,
+      "housing_options": 0,
+      "estimated_costs": 0,
+      "required_documents": 2,
+      "source_links": 3,
+      "unverified_items": 29
+    },
+    "counts_after": {
+      "application_deadlines": 2,
+      "language_requirements": 2,
+      "academic_periods": 8,
+      "housing_options": 0,
+      "estimated_costs": 0,
+      "required_documents": 2,
+      "source_links": 3,
+      "unverified_items": 29
+    }
+  },
+  "issues": [
+    {
+      "level": "warning",
+      "code": "many_unverified_items",
+      "path": "unverified_items",
+      "message": "미확인 항목이 29개입니다. 사람 검수 시 우선 확인하세요.",
+      "fixed": false
+    }
+  ]
+}

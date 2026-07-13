@@ -1,0 +1,18 @@
+{"schema_version":"1.0.0","defaults":{"academic_year":"2026/27","program_name":"Incoming Exchange","search_limit":3,"solar_model":"solar-pro3"},"universities":[
+{"university_name":"City University of Hong Kong","slug":"City University of HONG KONG","official_domain":"cityu.edu.hk"},
+{"university_name":"ICHEC Brussels Management School","slug":"ICHEC Brussels Management School","official_domain":"ichec.be"},
+{"university_name":"ICN Business School","slug":"ICN Business School","official_domain":"icn-artem.com"},
+{"university_name":"Jean Moulin University Lyon 3","slug":"Jean Moulin University Lyon 3","official_domain":"univ-lyon3.fr"},
+{"university_name":"KU Leuven","slug":"KU Leuven","official_domain":"kuleuven.be"},
+{"university_name":"LUT University","slug":"LUT University (Lappeenranta-Lahti University of Technology)","official_domain":"lut.fi"},
+{"university_name":"MCI Innsbruck","slug":"MCI","official_domain":"mci.edu"},
+{"university_name":"National Institute for Oriental Languages and Civilizations (INALCO)","slug":"National Institute for Oriental Languages and Civilizations (INALCO)","official_domain":"inalco.fr"},
+{"university_name":"Universidad San Francisco de Quito","slug":"Universidad San Francisco de Quito","official_domain":"usfq.edu.ec"},
+{"university_name":"University of Copenhagen","slug":"University of Copenhagen","official_domain":"ku.dk"},
+{"university_name":"University of Eastern Finland","slug":"University of Eastern Finland","official_domain":"uef.fi"},
+{"university_name":"University of Helsinki","slug":"University of Helsinki","official_domain":"helsinki.fi"},
+{"university_name":"University of Manitoba","slug":"University of Manitoba","official_domain":"umanitoba.ca"},
+{"university_name":"University of São Paulo","slug":"University of Sao Paulo","official_domain":"usp.br"},
+{"university_name":"University of Southern Denmark","slug":"University of Southern Denmark","official_domain":"sdu.dk"},
+{"university_name":"Vorarlberg University of Applied Sciences","slug":"Vorarberg University of Applied Sciences","official_domain":"fhv.at"}
+]}

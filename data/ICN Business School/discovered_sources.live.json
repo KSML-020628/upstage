@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "ICN Business School",
+  "official_domain": "icn-artem.com",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-13T14:57:16.553664+00:00",
+  "provider": "firecrawl",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "Exchange programmes - ICN Artem",
+      "url": "https://www.icn-artem.com/en/international/exchange-programmes/",
+      "description": "ICN Business School is strongly committed to internationalisation, which is reflected across all its programmes through study abroad opportunities and courses ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "International - ICN Business School",
+      "url": "https://www.icn-artem.com/en/international/",
+      "description": "Contact our sales team ... International scholarships help make studying at ICN Business School more accessible for international students by reducing tuition ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" international office contact"
+    },
+    "fact_sheet": null,
+    "academic_calendar": null,
+    "course_catalog": null,
+    "housing": null,
+    "language_requirement": null,
+    "application_guide": null
+  },
+  "candidates": [
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange programmes - ICN Artem",
+      "url": "https://www.icn-artem.com/en/international/exchange-programmes/",
+      "description": "ICN Business School is strongly committed to internationalisation, which is reflected across all its programmes through study abroad opportunities and courses ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 45,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "ICN Business School renews its “Bienvenue en France” label ...",
+      "url": "https://www.icn-artem.com/en/icn-business-school-renews-its-bienvenue-en-france-label-for-another-five-years/",
+      "description": "ICN Business School renews its “Bienvenue en France” label for another five years · A strategy designed to enhance the international student ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Studying Abroad - ICN Business School",
+      "url": "https://www.icn-artem.com/en/studying-abroad/",
+      "description": "At ICN Business School, you have the opportunity to study at more than 130 partner universities across 40+ countries worldwide. From Asia to North America and ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "International - ICN Business School",
+      "url": "https://www.icn-artem.com/en/international/",
+      "description": "Contact our sales team ... International scholarships help make studying at ICN Business School more accessible for international students by reducing tuition ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Students - ICN Artem",
+      "url": "https://www.icn-artem.com/en/students/",
+      "description": "Spend part of your studies abroad within a global academic network. ICN Business School offers a wide range of exchange programmes and dual degree schemes with ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Your complete guide to studying at ICN Business School",
+      "url": "https://www.icn-artem.com/en/your-complete-guide-to-studying-at-icn-business-school/",
+      "description": "Everything you need to know about programmes, campuses, admissions, and student life in France and Europe. ... ICN Business School needs the contact information ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:icn-artem.com \"ICN Business School\" international office contact"
+    }
+  ]
+}

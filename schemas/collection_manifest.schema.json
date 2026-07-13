@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skku-exchange.local/schemas/collection-manifest.schema.json",
+  "title": "Collected University Documents Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "university_name", "started_at", "completed_at", "summary", "documents"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "university_name": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "succeeded", "failed", "skipped"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "succeeded": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/document"}
+    }
+  },
+  "$defs": {
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id", "source_kind", "source_types", "title", "url", "local_path", "is_pdf", "provider",
+        "status", "collected_at", "content_path", "raw_response_path",
+        "content_sha256", "content_length", "error"
+      ],
+      "properties": {
+        "document_id": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+        "source_kind": {"enum": ["web", "manual"]},
+        "source_types": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "title": {"type": "string"},
+        "url": {
+          "anyOf": [
+            {"type": "string", "format": "uri", "pattern": "^https?://"},
+            {"type": "null"}
+          ]
+        },
+        "local_path": {"type": ["string", "null"]},
+        "is_pdf": {"type": "boolean"},
+        "provider": {"enum": ["firecrawl", "upstage"]},
+        "status": {"enum": ["succeeded", "failed", "skipped"]},
+        "collected_at": {"type": "string", "format": "date-time"},
+        "content_path": {"type": ["string", "null"]},
+        "raw_response_path": {"type": ["string", "null"]},
+        "content_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "content_length": {"type": "integer", "minimum": 0},
+        "error": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

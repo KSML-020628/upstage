@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "ICHEC Brussels Management School",
+  "official_domain": "ichec.be",
+  "academic_year": "2026/27",
+  "discovered_at": "2026-07-13T14:55:52.059381+00:00",
+  "provider": "firecrawl",
+  "primary_sources": {
+    "incoming_exchange": {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "description": "By email: exchange.in@ichec.be. By phone: +32 2 778 03 75. By regular mail: ICHEC Brussels Management School. International Office – Incoming Students. Rue au ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 60,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" incoming exchange study abroad"
+    },
+    "international_office": {
+      "source_type": "international_office",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "description": "ICHEC Brussels Management School. International Office – Incoming Students. Rue au Bois, 365A. 1150 Brussels. Belgium. Page 7. 7. 3. Student Associations.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 65,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" international office contact"
+    },
+    "fact_sheet": null,
+    "academic_calendar": null,
+    "course_catalog": {
+      "source_type": "course_catalog",
+      "title": "ICHEC Brussels Management School FACT SHEET 2025",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf",
+      "description": "The course costs 150 EUR for the whole week and is worth 3 ECTS credits. Course catalogue (link of website) https://www.ichec.be/en/inward-exchanges.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 60,
+      "discovery_query": "site:ichec.be course catalog catalogue exchange students"
+    },
+    "housing": null,
+    "language_requirement": null,
+    "application_guide": null
+  },
+  "candidates": [
+    {
+      "source_type": "course_catalog",
+      "title": "ICHEC Brussels Management School FACT SHEET 2025",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf",
+      "description": "The course costs 150 EUR for the whole week and is worth 3 ECTS credits. Course catalogue (link of website) https://www.ichec.be/en/inward-exchanges.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 60,
+      "discovery_query": "site:ichec.be course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Course Catalogue 2025-2026 Courses taught in English",
+      "url": "https://www.ichec.be/sites/default/files/uploads/List%20courses%202025-2026_0.pdf",
+      "description": "All ICHEC courses are open to exchange students. You can choose any course from BAC1 to MASTER2, in French, English, during the day or in the evening.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 60,
+      "discovery_query": "site:ichec.be course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "course_catalog",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "description": "All ICHEC courses are open to exchange students. You can choose any course mentioned in the ICHEC programmes: from BAC1 to MASTER2, in French, English,",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 40,
+      "discovery_query": "site:ichec.be course catalog catalogue exchange students"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "description": "By email: exchange.in@ichec.be. By phone: +32 2 778 03 75. By regular mail: ICHEC Brussels Management School. International Office – Incoming Students. Rue au ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 60,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "ICHEC Brussels Management School FACT SHEET 2025",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf",
+      "description": "ICHEC Brussels Management School is a business school offering Bachelor and ... EWP Learning Agreement signatory for incoming students. Exchange.in@ichec.be.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 50,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "incoming_exchange",
+      "title": "Master's degree in Business Management - International ...",
+      "url": "https://www.ichec.be/en/masters-degree-business-management-international-track",
+      "description": "This program is fully taught in english. We propose its equivalent in french. Since its creation in 1954 ICHEC Brussels Management School has always sought ...",
+      "is_official": true,
+      "is_pdf": false,
+      "score": 35,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" incoming exchange study abroad"
+    },
+    {
+      "source_type": "international_office",
+      "title": "Exchange Student Guideline Academic year 2025 - 2026",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Practical%20guide%202025-2026.pdf",
+      "description": "ICHEC Brussels Management School. International Office – Incoming Students. Rue au Bois, 365A. 1150 Brussels. Belgium. Page 7. 7. 3. Student Associations.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 65,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "ICHEC Brussels Management School FACT SHEET 2025",
+      "url": "https://www.ichec.be/sites/default/files/uploads/Fact%20Sheet%202025-2026.pdf",
+      "description": "Faculty / Department. ICHEC Brussels Management School is a business school offering Bachelor and. Master programmes in “Business Engineering” and “Business ...",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 40,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" international office contact"
+    },
+    {
+      "source_type": "international_office",
+      "title": "ICHEC Brussels Management School",
+      "url": "https://www.ichec.be/sites/default/files/uploads/International/Fact%20Sheet.pdf",
+      "description": "ICHEC Brussels Management School is a stand-alone business school offering Bachelor and Master programmes in “Business.",
+      "is_official": true,
+      "is_pdf": true,
+      "score": 35,
+      "discovery_query": "site:ichec.be \"ICHEC Brussels Management School\" international office contact"
+    }
+  ]
+}

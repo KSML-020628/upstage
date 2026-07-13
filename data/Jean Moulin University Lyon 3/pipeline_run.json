@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "university_name": "Jean Moulin University Lyon 3",
+  "started_at": "2026-07-13T14:58:02.345852+00:00",
+  "completed_at": null,
+  "status": "running",
+  "stages": {
+    "discover": {
+      "status": "completed",
+      "candidates": 15
+    }
+  },
+  "artifacts": {
+    "discovery": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/Jean Moulin University Lyon 3/discovered_sources.live.json",
+    "manifest": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/Jean Moulin University Lyon 3/parsed_documents/manifest.json",
+    "generated": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/Jean Moulin University Lyon 3/standard.generated.json",
+    "cleaned": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/Jean Moulin University Lyon 3/standard.cleaned.json",
+    "quality_report": "C:/Users/minju/Documents/skku/upstage_comp/skku_exchange_project/data/Jean Moulin University Lyon 3/quality_report.json"
+  }
+}
