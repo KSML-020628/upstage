@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ChatbotWidget } from "./ui/ChatbotWidget";
 
 export const metadata: Metadata = {
   title: "SKKU Exchange Atlas",
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ChatbotWidget />
+      </body>
     </html>
   );
 }
