@@ -7,6 +7,7 @@ import { getUniversities } from "../lib/supabase";
 import type { University } from "../lib/types";
 import { Header } from "./Header";
 import { InteractiveGlobe } from "./InteractiveGlobe";
+import { CountryDetailPanel } from "./CountryDetailPanel";
 
 const countryOptions = ["영국", "유럽", "북미", "아시아", "오세아니아"];
 const majorOptions = ["인문·사회", "경영·경제", "공학", "자연과학", "예술", "의학·생명"];
@@ -45,7 +46,7 @@ export function HomeExplorer() {
   return <main className="home-shell"><Header/>
     <section className="hero-copy filter-hero"><div><p className="eyebrow">FIND YOUR EXCHANGE</p><h1>내 조건에 맞는<br/><em>교환대학</em>을 찾아보세요.</h1><p>희망 국가와 전공, 어학 성적, 예산을 함께 고려해<br/>지원 가능한 대학을 좁혀보세요.</p></div><div className="step-indicator"><b>01</b><span>조건 선택</span><i/><b>02</b><span>결과 확인</span><i/><b>03</b><span>대학 비교</span></div></section>
     <section className="explorer filter-explorer" aria-label="교환대학 조건 탐색">
-      <div className="globe-stage"><InteractiveGlobe universities={universities} onCountryClick={setCountryPopup}/>{countryPopup && <div className="country-popup"><button className="popup-close" onClick={() => setCountryPopup(null)} aria-label="닫기">×</button><p>COUNTRY UNIVERSITIES</p><h2>{countryPopup.country}</h2><span>{countryPopup.universities.length}개 대학</span><div>{countryPopup.universities.map((item) => <Link key={item.id} href={`/universities/${item.id}`}><b>{item.university_name}</b><small>{item.city} · 상세 정보 보기 →</small></Link>)}</div></div>}</div>
+      <div className="globe-stage"><InteractiveGlobe universities={universities} onCountryClick={setCountryPopup}/>{countryPopup && <CountryDetailPanel className="globe-country-panel" country={countryPopup.country} universities={countryPopup.universities} onClose={()=>setCountryPopup(null)}/>}</div>
       <aside className="finder-panel condition-panel">
         <div className="panel-title"><span>01</span><div><small>나의 교환학기 조건</small><h2>복수 조건을 선택할 수 있어요</h2></div></div>
         <fieldset className="field-label"><legend>관심 국가 <em>복수선택</em></legend><div className="multi-choice">{countryOptions.map((item) => <button type="button" key={item} className={countries.includes(item) ? "selected" : ""} onClick={() => setCountries(toggle(countries,item))}>{item}</button>)}</div></fieldset>
