@@ -9,6 +9,36 @@ import type { University } from "../lib/types";
 type CountryGroup = { country: string; latitude: number; longitude: number; universities: University[] };
 const SIZE = 800;
 const land = feature(worldData as never, (worldData as unknown as { objects:{ countries:never } }).objects.countries) as GeoJSON.Feature;
+const countryCoordinates: Record<string, [longitude: number, latitude: number]> = {
+  "Austria": [14.55, 47.52],
+  "Australia": [133.78, -25.27],
+  "Belgium": [4.67, 50.64],
+  "Brazil": [-51.93, -14.24],
+  "Canada": [-106.35, 56.13],
+  "China": [104.2, 35.86],
+  "Denmark": [9.5, 56.26],
+  "Ecuador": [-78.18, -1.83],
+  "Finland": [25.75, 61.92],
+  "France": [2.21, 46.23],
+  "Germany": [10.45, 51.17],
+  "Hong Kong": [114.17, 22.32],
+  "Ireland": [-8.24, 53.41],
+  "Italy": [12.57, 41.87],
+  "Japan": [138.25, 36.2],
+  "Mexico": [-102.55, 23.63],
+  "Netherlands": [5.29, 52.13],
+  "New Zealand": [174.89, -40.9],
+  "Norway": [8.47, 60.47],
+  "Singapore": [103.82, 1.35],
+  "South Korea": [127.77, 35.91],
+  "Spain": [-3.75, 40.46],
+  "Sweden": [18.64, 60.13],
+  "Switzerland": [8.23, 46.82],
+  "Taiwan": [120.96, 23.7],
+  "United Kingdom": [-3.44, 55.38],
+  "United States": [-98.58, 39.83],
+  "USA": [-98.58, 39.83],
+};
 
 export function InteractiveGlobe({ universities, onCountryClick }: { universities: University[]; onCountryClick:(group:CountryGroup)=>void }) {
   const rotationRef = useRef(4);
@@ -19,6 +49,8 @@ export function InteractiveGlobe({ universities, onCountryClick }: { universitie
     const grouped = new Map<string,University[]>();
     universities.forEach((item) => grouped.set(item.country,[...(grouped.get(item.country) ?? []),item]));
     return [...grouped.entries()].flatMap(([country,items]) => {
+      const countryPoint = countryCoordinates[country];
+      if (countryPoint) return [{ country, universities:items, latitude:countryPoint[1], longitude:countryPoint[0] }];
       const located = items.filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude) && !(item.latitude === 0 && item.longitude === 0));
       if (!located.length) return [];
       return [{
