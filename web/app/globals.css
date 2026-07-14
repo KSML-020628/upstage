@@ -98,8 +98,8 @@ button,input,select { font:inherit; }
 .country-pin:hover { box-shadow:0 10px 30px rgba(27,85,213,.35); }
 .country-pin span { display:grid; place-items:center; width:23px; height:23px; border-radius:50%; background:var(--blue); color:white; font-size:9px; }
 .country-pin b { font-size:9px; max-width:90px; overflow:hidden; text-overflow:ellipsis; }
-.globe-zoom { position:absolute; z-index:7; top:18%; right:12%; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(16,36,63,.16); border-radius:12px; background:rgba(255,255,255,.94); box-shadow:0 10px 26px rgba(16,36,63,.18); }
-.globe-zoom button { width:42px; height:38px; border:0; border-bottom:1px solid rgba(16,36,63,.1); background:transparent; color:var(--ink); font-size:22px; font-weight:700; cursor:pointer; }
+.globe-zoom { position:absolute; z-index:12; left:9%; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(16,36,63,.24); border-radius:13px; background:#fff; box-shadow:0 12px 32px rgba(16,36,63,.28); }
+.globe-zoom button { width:46px; height:42px; border:0; border-bottom:1px solid rgba(16,36,63,.12); background:transparent; color:var(--ink); font-size:24px; font-weight:700; cursor:pointer; }
 .globe-zoom button:last-child { border-bottom:0; }.globe-zoom button:hover:not(:disabled) { background:#edf4ff; color:var(--blue); }.globe-zoom button:disabled { opacity:.3; cursor:default; }
 .globe-zoom .zoom-level { height:32px; color:var(--blue); font-size:9px; font-weight:800; }
 .globe-help { position:absolute; bottom:15%; left:50%; transform:translateX(-50%); margin:0; color:#63758e; font-size:10px; background:rgba(245,247,242,.76); padding:7px 11px; border-radius:20px; white-space:nowrap; pointer-events:none; }
