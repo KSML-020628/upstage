@@ -12,6 +12,7 @@ import type { University } from "../lib/types";
 import { CountryDetailPanel } from "./CountryDetailPanel";
 
 const WIDTH=1200, HEIGHT=650;
+const rateCurrencies=["USD","EUR","GBP"] as const;
 const world = feature(worldData as never, (worldData as unknown as { objects:{ countries:never } }).objects.countries) as GeoJSON.Feature;
 const continentCoordinates:Record<ContinentName,[number,number]>={"북아메리카":[-105,45],"남아메리카":[-60,-18],"유럽":[15,51],"아프리카":[20,4],"아시아":[92,42],"오세아니아":[135,-25]};
 
@@ -21,9 +22,14 @@ export function WorldMapExplorer() {
   const [country,setCountry]=useState<string|null>(null);
   const [zoom,setZoom]=useState(1);
   const [pan,setPan]=useState({x:0,y:0});
+  const [krwRates,setKrwRates]=useState<Record<string,number>>({});
   const zoomRef=useRef(1);
   const dragRef=useRef<{x:number;y:number;panX:number;panY:number}|null>(null);
   useEffect(()=>{getUniversities().then(setUniversities);},[]);
+  useEffect(()=>{
+    Promise.all(rateCurrencies.map(async(currency)=>{const response=await fetch(`/api/exchange-rate?currency=${currency}`);if(!response.ok)throw new Error("rate");const data=await response.json() as {rate:number};return [currency,data.rate] as const;}))
+      .then((rows)=>setKrwRates(Object.fromEntries(rows))).catch(()=>setKrwRates({}));
+  },[]);
   const projection=useMemo(()=>geoNaturalEarth1().fitExtent([[20,20],[WIDTH-20,HEIGHT-20]],{type:"Sphere"}),[]);
   const mapPath=geoPath(projection)(world);
   const groups=useMemo(()=>{
@@ -44,7 +50,7 @@ export function WorldMapExplorer() {
 
   return <main className="world-explorer">
     <header className="world-header"><Link className="world-brand" href="/"><span>S</span><b>SKKU Exchange Atlas</b></Link><div><Link href="/filter">조건으로 찾기</Link><Link href="/universities">전체 대학</Link></div></header>
-    <section className="world-copy"><p>EXPLORE BEFORE YOU DECIDE</p><h1>어디로 갈지 몰라도 괜찮아요.<br/><em>대륙부터</em> 천천히 둘러보세요.</h1><span>대륙을 선택하면 현재 탐색할 수 있는 국가와 대학을 보여드려요.</span></section>
+    <section className="world-copy"><p>EXPLORE BEFORE YOU DECIDE</p><h1>어디로 갈지 몰라도 괜찮아요. <em>대륙부터</em> 천천히 둘러보세요.</h1><div className="krw-rate-strip"><small>대한민국 원화 기준</small>{rateCurrencies.map((currency)=><span key={currency}><b>{currency}</b> {krwRates[currency]?`${Math.round(krwRates[currency]).toLocaleString("ko-KR")}원`:"—"}</span>)}</div></section>
     <div className="flat-world" aria-label="대륙별 교환대학 세계 지도" onWheel={(event)=>{event.preventDefault();changeZoom(zoomRef.current+(event.deltaY<0?.2:-.2));}} onPointerDown={(event)=>{if((event.target as HTMLElement).closest("button"))return;dragRef.current={x:event.clientX,y:event.clientY,panX:pan.x,panY:pan.y};event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={(event)=>{if(!dragRef.current)return;const max=300*(zoomRef.current-1);setPan({x:Math.max(-max,Math.min(max,dragRef.current.panX+event.clientX-dragRef.current.x)),y:Math.max(-max*.65,Math.min(max*.65,dragRef.current.panY+event.clientY-dragRef.current.y))});}} onPointerUp={(event)=>{dragRef.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}} onPointerCancel={()=>{dragRef.current=null;}}>
       <div className="world-map-stage" style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`}}>
         <div className="world-map-canvas">
@@ -60,6 +66,5 @@ export function WorldMapExplorer() {
     </div>
     {continent && !country && <aside className="continent-drawer"><button className="drawer-close" onClick={()=>setContinent(null)} aria-label="닫기">×</button><p>SELECT A COUNTRY</p><h2>{continent}</h2><span>현재 정보가 등록된 국가를 선택하세요.</span><div>{countries.length?countries.map((item)=><button type="button" key={item} onClick={()=>setCountry(item)}><b>{item}</b><span>{groups.get(item)?.length??0}개 대학</span><i>→</i></button>):<p className="empty-continent">등록된 국가를 준비하고 있어요.</p>}</div></aside>}
     {country && <CountryDetailPanel className="world-country-panel" country={country} universities={selectedUniversities} onBack={()=>setCountry(null)} onClose={()=>{setCountry(null);setContinent(null);}}/>}
-    <p className="world-hint">휠로 확대·축소하고 드래그하여 이동한 뒤 대륙을 선택하세요</p>
   </main>;
 }
