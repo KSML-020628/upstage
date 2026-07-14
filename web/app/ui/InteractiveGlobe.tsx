@@ -18,7 +18,16 @@ export function InteractiveGlobe({ universities, onCountryClick }: { universitie
   const groups = useMemo<CountryGroup[]>(() => {
     const grouped = new Map<string,University[]>();
     universities.forEach((item) => grouped.set(item.country,[...(grouped.get(item.country) ?? []),item]));
-    return [...grouped.entries()].map(([country,items]) => ({ country, universities:items, latitude:items.reduce((sum,item)=>sum+item.latitude,0)/items.length, longitude:items.reduce((sum,item)=>sum+item.longitude,0)/items.length }));
+    return [...grouped.entries()].flatMap(([country,items]) => {
+      const located = items.filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude) && !(item.latitude === 0 && item.longitude === 0));
+      if (!located.length) return [];
+      return [{
+        country,
+        universities:items,
+        latitude:located.reduce((sum,item)=>sum+item.latitude,0)/located.length,
+        longitude:located.reduce((sum,item)=>sum+item.longitude,0)/located.length,
+      }];
+    });
   },[universities]);
 
   useEffect(() => {
