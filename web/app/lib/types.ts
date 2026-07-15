@@ -10,6 +10,8 @@ export type University = {
   longitude: number;
   image_url?: string;
   exchange_programs?: ExchangeProgram[];
+  profile_sections?: ProfileSection[];
+  unknowns?: string[];
 };
 
 export type ExchangeProgram = {
@@ -27,4 +29,12 @@ export type ExchangeProgram = {
   estimated_costs?: Record<string, unknown>[];
   required_documents?: Record<string, unknown>[];
   source_links?: Record<string, unknown>[];
+};
+
+export type ProfileSection = {
+  section_number: string;
+  section_title: string;
+  summary: string;
+  source_note?: string;
+  evidence_url?: string;
 };
