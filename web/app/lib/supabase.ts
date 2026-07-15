@@ -1,8 +1,12 @@
 import { fallbackUniversities } from "./fallback-data";
 import type { ExchangeProgram, ProfileSection, University } from "./types";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+const key =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  process.env.SUPABASE_ANON_KEY ??
+  process.env.SUPABASE_KEY;
 
 function supabaseRestBase(): string {
   const raw = (url ?? "").replace(/\/+$/, "");
