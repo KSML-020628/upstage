@@ -2,14 +2,24 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
+type Source = {
+  title: string;
+  url: string;
+  university_name?: string;
+  source_type?: string;
+  is_official?: boolean;
+};
+
 type Message = {
   role: "user" | "assistant";
   content: string;
+  sources?: Source[];
 };
 
 const WELCOME: Message = {
   role: "assistant",
-  content: "안녕하세요! 교환대학의 지원 조건, 어학 성적, 일정, 주거비를 물어보세요. 확인된 데이터와 출처를 바탕으로 답할게요.",
+  content:
+    "안녕하세요. 교환대학의 지원 조건, 어학 성적, 일정, 주거비를 물어보세요. 등록된 Supabase 데이터를 근거로 답변할게요.",
 };
 
 const QUICK_QUESTIONS = [
@@ -20,11 +30,36 @@ const QUICK_QUESTIONS = [
 
 function MessageText({ text }: { text: string }) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  return <>{parts.map((part, index) => part.startsWith("http") ? (
-    <a key={`${part}-${index}`} href={part.replace(/[),.;]+$/, "")} target="_blank" rel="noreferrer">
-      {part.replace(/[),.;]+$/, "")}
-    </a>
-  ) : <span key={`${part}-${index}`}>{part}</span>)}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.startsWith("http") ? (
+          <a key={`${part}-${index}`} href={part.replace(/[),.;]+$/, "")} target="_blank" rel="noreferrer">
+            {part.replace(/[),.;]+$/, "")}
+          </a>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function SourceCards({ sources }: { sources?: Source[] }) {
+  if (!sources?.length) return null;
+
+  return (
+    <div className="chat-source-cards" aria-label="답변 근거 출처">
+      <p>DB 근거 출처</p>
+      {sources.map((source) => (
+        <a key={`${source.url}-${source.title}`} href={source.url} target="_blank" rel="noreferrer">
+          <span>{source.is_official === false ? "비공식/보조 자료" : "공식 자료"}</span>
+          <b>{source.title || "Source"}</b>
+          {source.university_name && <small>{source.university_name}</small>}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 export function ChatbotWidget() {
@@ -50,6 +85,13 @@ export function ChatbotWidget() {
     return () => window.removeEventListener("keydown", closeWithEscape);
   }, []);
 
+  function resetChat() {
+    setMessages([WELCOME]);
+    setInput("");
+    setLoading(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   async function send(question: string) {
     const content = question.trim();
     if (!content || loading) return;
@@ -57,22 +99,32 @@ export function ChatbotWidget() {
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages.slice(-8) }),
+        body: JSON.stringify({
+          messages: nextMessages.slice(-8).map(({ role, content }) => ({ role, content })),
+        }),
       });
-      const result = await response.json() as { answer?: string; error?: string };
-      setMessages((current) => [...current, {
-        role: "assistant",
-        content: result.answer || result.error || "답변을 불러오지 못했습니다.",
-      }]);
+      const result = (await response.json()) as { answer?: string; error?: string; sources?: Source[] };
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: result.answer || result.error || "답변을 불러오지 못했습니다.",
+          sources: result.sources,
+        },
+      ]);
     } catch {
-      setMessages((current) => [...current, {
-        role: "assistant",
-        content: "네트워크 연결을 확인한 뒤 다시 질문해 주세요.",
-      }]);
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: "네트워크 연결을 확인한 뒤 다시 질문해 주세요.",
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -98,25 +150,41 @@ export function ChatbotWidget() {
             <div className="chatbot-avatar">AI</div>
             <div>
               <strong>Exchange Atlas AI</strong>
-              <span><i /> Supabase 대학 정보 기반</span>
+              <span>
+                <i /> Supabase 대학 정보 기반
+              </span>
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="챗봇 닫기">×</button>
+            <button type="button" className="chatbot-reset" onClick={resetChat}>
+              새 대화
+            </button>
+            <button type="button" onClick={() => setOpen(false)} aria-label="챗봇 닫기">
+              ×
+            </button>
           </header>
 
           <div className="chatbot-messages" ref={listRef} aria-live="polite">
             {messages.map((message, index) => (
               <div className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
                 <MessageText text={message.content} />
+                {message.role === "assistant" && <SourceCards sources={message.sources} />}
               </div>
             ))}
             {messages.length === 1 && (
               <div className="chatbot-quick">
                 {QUICK_QUESTIONS.map((question) => (
-                  <button type="button" key={question} onClick={() => void send(question)}>{question}</button>
+                  <button type="button" key={question} onClick={() => void send(question)}>
+                    {question}
+                  </button>
                 ))}
               </div>
             )}
-            {loading && <div className="chat-message assistant chatbot-typing"><i /><i /><i /></div>}
+            {loading && (
+              <div className="chat-message assistant chatbot-typing">
+                <i />
+                <i />
+                <i />
+              </div>
+            )}
           </div>
 
           <form className="chatbot-form" onSubmit={submit}>
@@ -130,9 +198,11 @@ export function ChatbotWidget() {
               placeholder="대학 정보에 대해 질문해 보세요"
               aria-label="챗봇 질문"
             />
-            <button type="submit" disabled={!input.trim() || loading} aria-label="질문 보내기">↑</button>
+            <button type="submit" disabled={!input.trim() || loading} aria-label="질문 보내기">
+              →
+            </button>
           </form>
-          <p className="chatbot-disclaimer">AI 답변은 원문 출처와 함께 최종 확인해 주세요.</p>
+          <p className="chatbot-disclaimer">AI 답변은 DB 출처와 함께 최종 확인해 주세요.</p>
         </section>
       )}
 
