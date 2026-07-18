@@ -23,6 +23,7 @@ type SamuelUniversityRow = {
 };
 
 type CanonicalFactRow = {
+  university_id?: string;
   field_key: string;
   topic: string;
   value_json: unknown;
@@ -94,8 +95,28 @@ async function request<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestAll<T>(path: string, pageSize = 1000): Promise<T[]> {
+  const rows: T[] = [];
+  let offset = 0;
+  const separator = path.includes("?") ? "&" : "?";
+  const basePath = path.replace(/([?&])limit=\d+(&?)/, (_match, prefix, suffix) => (suffix ? prefix : "")).replace(/[?&]$/, "");
+
+  while (true) {
+    const page = await request<T[]>(`${basePath}${separator}limit=${pageSize}&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return rows;
+}
+
 function factMap(facts: CanonicalFactRow[]): Map<string, CanonicalFactRow> {
-  return new Map(facts.map((fact) => [fact.field_key, fact]));
+  const mapped = new Map<string, CanonicalFactRow>();
+  for (const fact of facts) {
+    if (!mapped.has(fact.field_key)) mapped.set(fact.field_key, fact);
+  }
+  return mapped;
 }
 
 function profileFromFacts(facts: CanonicalFactRow[]): Record<string, unknown> | undefined {
@@ -165,8 +186,8 @@ function exchangeProgram(row: SamuelUniversityRow, profile: Record<string, unkno
   };
 }
 
-async function hydrateUniversity(row: SamuelUniversityRow): Promise<University> {
-  const facts = await request<CanonicalFactRow[]>(
+async function hydrateUniversity(row: SamuelUniversityRow, prefetchedFacts?: CanonicalFactRow[]): Promise<University> {
+  const facts = prefetchedFacts ?? await request<CanonicalFactRow[]>(
     `canonical_facts?select=field_key,topic,value_json,value_text,evidence_url&university_id=eq.${encodeURIComponent(row.id)}`,
   );
   const mapped = factMap(facts);
@@ -197,9 +218,23 @@ async function hydrateUniversity(row: SamuelUniversityRow): Promise<University> 
 
 export async function getUniversities(): Promise<University[]> {
   try {
-    const rows = await request<SamuelUniversityRow[]>("universities?select=id,name,country,city,homepage_url,exchange_url&order=name.asc");
-    return await Promise.all(rows.map(hydrateUniversity));
-  } catch {
+    const rows = await requestAll<SamuelUniversityRow>("universities?select=id,name,country,city,homepage_url,exchange_url&order=name.asc");
+    if (!rows.length) return [];
+    const ids = rows.map((row) => row.id);
+    const facts = await requestAll<CanonicalFactRow>(
+      `canonical_facts?select=university_id,field_key,topic,value_json,value_text,evidence_url&field_key=eq.ui_profile_json&university_id=in.(${ids.map(encodeURIComponent).join(",")})`,
+    );
+    const factsByUniversity = new Map<string, CanonicalFactRow[]>();
+    for (const fact of facts) {
+      if (!fact.university_id) continue;
+      const group = factsByUniversity.get(fact.university_id) ?? [];
+      group.push(fact);
+      factsByUniversity.set(fact.university_id, group);
+    }
+    return await Promise.all(rows.map((row) => hydrateUniversity(row, factsByUniversity.get(row.id) ?? [])));
+  } catch (error) {
+    console.error("Supabase university list fetch failed; using fallback data", error);
+    if (process.env.NODE_ENV === "development") throw error;
     return fallbackUniversities;
   }
 }
@@ -210,7 +245,9 @@ export async function getUniversity(id: string): Promise<University | undefined>
     const rows = await request<SamuelUniversityRow[]>(`universities?select=id,name,country,city,homepage_url,exchange_url&id=eq.${encodeURIComponent(id)}&limit=1`);
     if (!rows[0]) return fallback;
     return await hydrateUniversity(rows[0]);
-  } catch {
+  } catch (error) {
+    console.error("Supabase university detail fetch failed; using fallback data", error);
+    if (process.env.NODE_ENV === "development") throw error;
     return fallback;
   }
 }
