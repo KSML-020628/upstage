@@ -27,6 +27,8 @@ export type ExchangeProgram = {
   academic_periods?: AcademicPeriod[];
   housing_options?: HousingOption[];
   estimated_costs?: EstimatedCost[];
+  course_restrictions?: CourseRestriction[];
+  quota_facts?: FlexibleRow[];
   required_documents?: RequiredDocument[];
   source_links?: SourceLink[];
 };
@@ -103,6 +105,18 @@ export type EstimatedCost = FlexibleRow & {
   normalized_krw_min?: number | string | null;
   normalized_krw_max?: number | string | null;
   original_text?: string | null;
+  source_url?: string | null;
+  source_type?: string | null;
+  evidence_quote?: string | null;
+  confidence?: number | string | null;
+  review_status?: string | null;
+};
+
+export type CourseRestriction = FlexibleRow & {
+  restriction_type?: string | null;
+  department_or_school?: string | null;
+  restriction_text?: string | null;
+  applies_to_exchange?: boolean | null;
   source_url?: string | null;
   source_type?: string | null;
   evidence_quote?: string | null;

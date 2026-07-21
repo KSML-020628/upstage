@@ -45,9 +45,31 @@ type ResultCard = {
   source_field_key?: string;
   evidence_quote?: string;
   fact_bundle?: FactEvidence[];
+  match_status?: "matched" | "partial";
+  condition_checks?: ConditionCheck[];
+  unknown_fields?: string[];
 };
 
-type Intent = "housing" | "language" | "cost" | "deadline" | "quota" | "source" | "general";
+type ConditionState = "met" | "unknown" | "failed";
+
+type ConditionCheck = {
+  key: string;
+  label: string;
+  state: ConditionState;
+  detail: string;
+};
+
+type EvaluatedUniversity = {
+  university: University;
+  checks: ConditionCheck[];
+  status: "matched" | "partial" | "excluded";
+};
+
+type Intent = "housing" | "language" | "cost" | "deadline" | "quota" | "restriction" | "source" | "general";
+
+type QuotaMode = "minimum" | "exists" | "missing" | "sort_desc";
+type DeadlineSemester = "autumn" | "spring";
+type DeadlineType = "application" | "nomination";
 
 type QueryConstraints = {
   intent: Intent;
@@ -59,13 +81,26 @@ type QueryConstraints = {
   requireOfficialSource: boolean;
   requireClearCost: boolean;
   countries: string[];
+  excludedCountries: string[];
+  excludeAsia: boolean;
   languageTest?: string;
   languageScore?: number;
+  languageSubscore?: number;
   budgetKrwSemester?: number;
   gpa?: number;
   major?: string;
   quotaMin?: number;
+  quotaMode?: QuotaMode;
+  requireGpaKnown?: boolean;
+  requireQuotaKnown?: boolean;
+  requireHousingMissing?: boolean;
   sortDeadlineEarliest?: boolean;
+  deadlineAcademicYear?: number;
+  deadlineSemester?: DeadlineSemester;
+  deadlineType?: DeadlineType;
+  deadlineSpringOnly?: boolean;
+  deadlineRequireClearYear?: boolean;
+  unsupportedReason?: "cost_of_living_index";
 };
 
 type CostComponent = {
@@ -141,6 +176,11 @@ const EUROPE_COUNTRIES = new Set(
     "Hungary",
   ].map(normalizeSearchText),
 );
+
+const ASIA_COUNTRIES = new Set([
+  "china", "hong kong", "india", "indonesia", "japan", "malaysia", "mongolia", "philippines",
+  "singapore", "south korea", "korea", "taiwan", "thailand", "turkey", "vietnam",
+]);
 
 const COUNTRY_ALIASES: Array<{ country: string; patterns: RegExp[] }> = [
   { country: "France", patterns: [/프랑스/, /france|french/] },
@@ -496,6 +536,7 @@ function withFactTableRows(university: University, bundle?: FactTableBundle): Un
     housing_options: bundle.housing.length ? bundle.housing : program.housing_options,
     language_requirements: bundle.languages.length ? bundle.languages : program.language_requirements,
     application_deadlines: bundle.deadlines.length ? bundle.deadlines : program.application_deadlines,
+    quota_facts: bundle.quotas,
   };
   return {
     ...university,
@@ -566,10 +607,11 @@ function rowsText(rows: Record<string, unknown>[] | undefined) {
 
 function detectIntent(question: string): Intent {
   const text = normalizeSearchText(question);
+  if (includesAny(text, [/수강\s*제한/, /전공\s*제한/, /선수\s*과목/, /제한된/, /restricted/, /restriction/, /prerequisite/, /approval required/, /not available/])) return "restriction";
   if (includesAny(text, [/비용/, /생활비/, /예산/, /학비/, /등록금/, /기숙사비/, /저렴/, /최저/, /싼/, /싸/, /낮은/, /적게/, /cost/, /fee/, /budget/, /tuition/, /living/, /cheap/, /cheapest/, /lowest/, /least expensive/])) return "cost";
   if (includesAny(text, [/기숙/, /숙소/, /주거/, /housing/, /accommodation/, /dorm/, /residence/])) return "housing";
   if (includesAny(text, [/ielts/, /toefl/, /어학/, /영어/, /언어/, /language/, /english/])) return "language";
-  if (includesAny(text, [/마감/, /일정/, /지원/, /deadline/, /application/, /nomination/])) return "deadline";
+  if (includesAny(text, [/마감/, /지원\s*일정/, /지원\s*마감/, /노미네이션/, /nomination/, /deadline/, /application deadline/])) return "deadline";
   if (includesAny(text, [/정원/, /인원/, /quota/, /몇 명/, /몇명/])) return "quota";
   if (includesAny(text, [/출처/, /공식/, /링크/, /근거/, /source/])) return "source";
   return "general";
@@ -584,15 +626,33 @@ function isExchangeQuestion(question: string) {
   ]);
 }
 
-function detectLanguageRequirement(question: string) {
+function isCostOfLivingIndexQuestion(question: string) {
   const text = normalizeSearchText(question);
-  const score = text.match(/(?:ielts|toefl|duolingo|pte|cambridge|ellt)?\s*(\d+(?:\.\d+)?)/i);
-  if (/ielts/.test(text) && score) return { test: "IELTS Academic", score: Number(score[1]) };
-  if (/toefl/.test(text) && score) return { test: "TOEFL iBT", score: Number(score[1]) };
-  if (/duolingo/.test(text) && score) return { test: "Duolingo English Test", score: Number(score[1]) };
-  if (/pte/.test(text) && score) return { test: "PTE Academic", score: Number(score[1]) };
-  if (/cambridge|cae|cpe/.test(text) && score) return { test: "Cambridge CAE/CPE", score: Number(score[1]) };
-  if (/ellt|oxford/.test(text) && score) return { test: "Oxford ELLT", score: Number(score[1]) };
+  const raw = question.normalize("NFKC").toLowerCase();
+  return /물가\s*지수|numbeo|cost of living index|한국.*물가|물가.*비슷|생활\s*수준.*비슷/.test(text)
+    || /물가\s*지수|numbeo|cost of living index|한국.*물가|물가.*비슷|생활\s*수준.*비슷/.test(raw);
+}
+
+function isRemovedCostRecommendation(question: string, targetCount: number) {
+  const text = question.normalize("NFKC").toLowerCase();
+  if (/예산|상한|budget/.test(text)) return true;
+  if (/총\s*비용|전체\s*비용|종합\s*비용|total\s*cost/.test(text)) return true;
+  if (targetCount === 1) return false;
+  return /비용[^\n]{0,30}(?:비교|순위|랭킹|가장|최저|저렴|싼|낮은\s*순|적게|추천)|(?:compare|rank|ranking|cheapest|lowest|recommend)[^\n]{0,30}(?:cost|fee)/i.test(text);
+}
+
+function detectLanguageRequirement(question: string) {
+  const text = question.normalize("NFKC").toLowerCase();
+  const testMatch = text.match(/(ielts|toefl(?:\s*ibt)?|duolingo|pte|cambridge|cae|cpe|ellt|oxford)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i);
+  const score = testMatch ? Number(testMatch[2].replace(",", ".")) : undefined;
+  const subscoreMatch = text.match(/(?:각\s*(?:영역|항목)|each\s*(?:band|component|section)|no\s*(?:band|component)\s*below)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i);
+  const subscore = subscoreMatch ? Number(subscoreMatch[1].replace(",", ".")) : undefined;
+  if (/ielts/.test(text) && score !== undefined) return { test: "IELTS Academic", score, subscore };
+  if (/toefl/.test(text) && score !== undefined) return { test: "TOEFL iBT", score, subscore };
+  if (/duolingo/.test(text) && score !== undefined) return { test: "Duolingo English Test", score, subscore };
+  if (/pte/.test(text) && score !== undefined) return { test: "PTE Academic", score, subscore };
+  if (/cambridge|cae|cpe/.test(text) && score !== undefined) return { test: "Cambridge CAE/CPE", score, subscore };
+  if (/ellt|oxford/.test(text) && score !== undefined) return { test: "Oxford ELLT", score, subscore };
   return undefined;
 }
 
@@ -608,11 +668,21 @@ function detectBudgetKrwSemester(question: string) {
 }
 
 function detectGpa(question: string) {
-  const text = normalizeSearchText(question);
-  const match = text.match(/(?:gpa|학점|평점)\s*(\d+(?:\.\d+)?)/i);
+  const text = question.normalize("NFKC").toLowerCase();
+  const match = text.match(/(?:gpa|학점|평점)\s*(?:이|은|는|:)?\s*(\d+(?:[.,]\d+)?)(?:\s*\/\s*(\d+(?:[.,]\d+)?))?/i)
+    ?? text.match(/(\d+(?:[.,]\d+)?)\s*\/\s*4[.,]5/);
   if (!match) return undefined;
-  const gpa = Number(match[1]);
+  const gpa = Number(match[1].replace(",", "."));
   return Number.isFinite(gpa) ? gpa : undefined;
+}
+
+function detectQuotaMode(question: string, quotaMin?: number): QuotaMode | undefined {
+  const raw = question.normalize("NFKC").toLowerCase();
+  if (quotaMin !== undefined) return "minimum";
+  if (!/quota|정원|파견\s*인원|선발\s*인원/.test(raw)) return undefined;
+  if (/미확인|없는|없고|알\s*수\s*없는/.test(raw)) return "missing";
+  if (/내림차순|많은\s*순|높은\s*순|가장\s*많/.test(raw)) return "sort_desc";
+  return "exists";
 }
 
 function detectMajor(question: string) {
@@ -625,9 +695,25 @@ function detectMajor(question: string) {
   return undefined;
 }
 
+function countryMentionIsExcluded(rawText: string, matchIndex: number, matchLength: number) {
+  const context = rawText.slice(Math.max(0, matchIndex - 24), Math.min(rawText.length, matchIndex + matchLength + 24));
+  return /제외|빼고|말고|아닌|제외하고|except|exclude|without/.test(context);
+}
+
 function detectCountries(question: string) {
   const rawText = question.normalize("NFKC").toLowerCase();
-  return COUNTRY_ALIASES.filter(({ patterns }) => patterns.some((pattern) => pattern.test(rawText))).map(({ country }) => country);
+  return COUNTRY_ALIASES.filter(({ patterns }) => patterns.some((pattern) => {
+    const match = rawText.match(pattern);
+    return Boolean(match && !countryMentionIsExcluded(rawText, match.index ?? 0, match[0].length));
+  })).map(({ country }) => country);
+}
+
+function detectExcludedCountries(question: string) {
+  const rawText = question.normalize("NFKC").toLowerCase();
+  return COUNTRY_ALIASES.filter(({ patterns }) => patterns.some((pattern) => {
+    const match = rawText.match(pattern);
+    return Boolean(match && countryMentionIsExcluded(rawText, match.index ?? 0, match[0].length));
+  })).map(({ country }) => country);
 }
 
 function detectQuotaMin(question: string) {
@@ -648,11 +734,14 @@ function detectConstraints(question: string): QueryConstraints {
   const text = normalizeSearchText(question);
   const rawQuestion = question.toLowerCase();
   const intent = detectIntent(question);
+  const costOfLivingIndexQuestion = isCostOfLivingIndexQuestion(question);
   const topMatch = question.match(
     /(\d+)\s*(개|곳|명|schools?|universities?)|(\d+)\s*(cheapest|lowest|best|recommended|추천)|(?:recommend|show|pick|select|top)\s*(?:the\s*)?(\d+)/i,
   );
   const topValue = topMatch?.[1] ?? topMatch?.[3] ?? topMatch?.[5];
   const language = detectLanguageRequirement(question);
+  const quotaMin = detectQuotaMin(question);
+  const quotaMode = detectQuotaMode(question, quotaMin);
   const koreanClearCost = /명확|숫자|공식 출처|출처가 있는|확인된|구체적인|비용 정보가 있는/.test(rawQuestion);
   const koreanOfficial = /공식|공식자료|공식 자료/.test(rawQuestion);
   const koreanHousing = /기숙사|숙소|주거/.test(rawQuestion);
@@ -661,24 +750,42 @@ function detectConstraints(question: string): QueryConstraints {
     intent,
     topN: Math.max(1, Math.min(8, topValue ? Number(topValue) : 4)),
     requireEurope: /유럽|europe|european/.test(text) || /유럽|europe|european/.test(rawQuestion),
-    inScope: isExchangeQuestion(question),
+    inScope: isExchangeQuestion(question) && !costOfLivingIndexQuestion,
     requireHousing: /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(text) || /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(rawQuestion),
     requireAll: /모든 조건|전부|only|만 추천|만 골라|제외|exclude|명확|공식 출처|숫자 비교/.test(text) || /모든 조건|전부|only|만 추천|만 골라|제외|exclude|명확|공식 출처|숫자 비교/.test(rawQuestion),
     requireOfficialSource: /공식|official/.test(text) || /공식|official/.test(rawQuestion),
     requireClearCost: /명확|숫자 비교|비용 정보가 부족|공식 출처|출처가 있는|정확/.test(text) || /명확|숫자 비교|비용 정보가 부족|공식 출처|출처가 있는|정확/.test(rawQuestion),
     countries: detectCountries(question),
+    excludedCountries: detectExcludedCountries(question),
+    excludeAsia: /(?:아시아|asia)[^\n]{0,18}(?:제외|빼고|빼줘|exclude|without)/i.test(question) || /(?:제외|빼고|빼줘|exclude|without)[^\n]{0,18}(?:아시아|asia)/i.test(question),
     languageTest: language?.test,
     languageScore: language?.score,
+    languageSubscore: language?.subscore,
     budgetKrwSemester: detectBudgetKrwSemester(question),
     gpa: detectGpa(question),
     major: detectMajor(question),
-    quotaMin: detectQuotaMin(question),
+    quotaMin,
+    quotaMode,
+    requireGpaKnown: /gpa.*(?:확인|공식)|(?:확인|공식).*gpa/i.test(rawQuestion),
+    requireQuotaKnown: /quota.*(?:확인|공식)|(?:확인|공식).*quota/i.test(rawQuestion),
+    requireHousingMissing: /기숙사\s*(?:정보가\s*)?(?:없는|없고|미확인)|housing[^\n]{0,20}(?:missing|unknown|without)/i.test(rawQuestion),
     sortDeadlineEarliest: intent === "deadline" || /빠른|가장 먼저|earliest|soonest/.test(text) || /빠른|가장 먼저|earliest|soonest/.test(rawQuestion),
+    deadlineAcademicYear: Number(rawQuestion.match(/\b(20\d{2})(?:\s*\/\s*\d{2,4})?/)?.[1]) || undefined,
+    deadlineSemester: /가을|autumn|fall/.test(rawQuestion) ? "autumn" as const : /봄|spring/.test(rawQuestion) ? "spring" as const : undefined,
+    deadlineType: /nomination|노미네이션|지명/.test(rawQuestion) && !/application|지원\s*마감/.test(rawQuestion)
+      ? "nomination" as const
+      : /application|지원\s*마감/.test(rawQuestion) && !/nomination|노미네이션|지명/.test(rawQuestion)
+        ? "application" as const
+        : undefined,
+    deadlineSpringOnly: /봄[^\n]{0,30}(?:있|등록)[^\n]{0,30}가을[^\n]{0,20}(?:없|미확인)|spring[^\n]{0,30}(?:only|but)[^\n]{0,30}(?:no|without)[^\n]{0,10}(?:autumn|fall)/i.test(rawQuestion),
+    deadlineRequireClearYear: /학년도.*(?:명확|불분명)|적용\s*학기.*(?:명확|불분명)|연도.*(?:명확|불분명)|과거\s*자료.*제외/.test(rawQuestion),
+    unsupportedReason: costOfLivingIndexQuestion ? "cost_of_living_index" as const : undefined,
   };
 
   return {
     ...constraints,
-    requireHousing: koreanHousing || constraints.requireHousing,
+    deadlineSemester: constraints.deadlineSpringOnly ? undefined : constraints.deadlineSemester,
+    requireHousing: constraints.requireHousingMissing ? false : koreanHousing || constraints.requireHousing,
     requireOfficialSource: koreanOfficial || constraints.requireOfficialSource,
     requireClearCost: koreanClearCost || constraints.requireClearCost,
   };
@@ -693,6 +800,10 @@ function isEuropeanUniversity(university: University) {
     /united kingdom|uk|england|scotland/.test(country) ||
     /paris|rennes|lyon|bristol|sheffield|venice|rostock|kiel|dornbirn|brussels|copenhagen|helsinki|joensuu|kuopio|toulouse|osnabruck/.test(`${city} ${name}`)
   );
+}
+
+function isAsianUniversity(university: University) {
+  return ASIA_COUNTRIES.has(normalizeSearchText(university.country));
 }
 
 function matchesCountry(university: University, countries: string[]) {
@@ -717,6 +828,7 @@ function relevantRows(university: University, intent: Intent) {
     const text = `${university.summary}\n${university.profile_sections?.map((section) => section.summary).join("\n") ?? ""}\n${program ? JSON.stringify(program) : ""}`;
     return /quota|정원|파견 가능 인원/i.test(text) ? [{ summary: text.slice(0, 600) }] : [];
   }
+  if (intent === "restriction") return program?.course_restrictions ?? [];
   return [];
 }
 
@@ -727,6 +839,7 @@ function sectionText(university: University, intent: Intent) {
     cost: /비용|생활비|예산|학비|등록금|cost|fee|housing/i,
     deadline: /마감|일정|deadline|application|nomination/i,
     quota: /quota|정원|파견 가능 인원/i,
+    restriction: /수강 제한|전공 제한|선수 과목|restricted|restriction|prerequisite|approval required|not available|limited/i,
     source: /공식|출처|source|link/i,
     general: /./i,
   };
@@ -752,6 +865,7 @@ function scoreUniversity(university: University, intent: Intent, question: strin
   if (intent === "deadline") score += (program?.application_deadlines?.length ?? 0) * 4;
   if (intent === "source") score += (program?.source_links?.length ?? 0) * 2;
   if (intent === "quota" && /quota|정원|파견 가능 인원/i.test(corpus)) score += 6;
+  if (intent === "restriction" && /restricted|not available|approval required|prerequisite|limited|수강 제한|전공 제한|선수 과목/i.test(corpus)) score += 6;
 
   for (const token of q.split(/\s+/).filter((item) => item.length >= 2)) {
     if (corpus.includes(token)) score += 1;
@@ -941,8 +1055,13 @@ function highlightFromRow(row: Record<string, unknown>, intent: Intent) {
   }
   if (intent === "language") {
     const test = cleanText(row.test_type, cleanText(row.language, "Language"));
-    const score = cleanText(row.minimum_score, cleanText(row.overall_score, cleanText(row.level)));
-    return score ? `${test}: ${score}` : rowText(row);
+    const scoreValue = row.minimum_score ?? row.overall_score ?? row.level;
+    const score = typeof scoreValue === "number" ? String(scoreValue) : cleanText(scoreValue);
+    const subscore = languageSubscoreRequirement(row);
+    const required = row.is_required === false ? "권장" : "필수";
+    if (score) return `${test} · 최소 ${score}${subscore !== undefined ? ` · 각 영역 ${subscore} 이상` : ""} · ${required}`;
+    const note = cleanText(row.notes, cleanText(row.evidence_quote));
+    return note ? `${test} · ${note.slice(0, 220)}` : `${test} · 점수 확인 필요`;
   }
   if (intent === "cost") {
     const costType = cleanText(row.cost_type, cleanText(row.housing_category, "비용"));
@@ -1045,18 +1164,73 @@ function matchesLanguageTest(stored: unknown, selected: string) {
   return (aliases[selected] ?? []).some((alias) => value.includes(alias));
 }
 
-function satisfiesLanguage(university: University, constraints: QueryConstraints) {
-  if (!constraints.languageTest || constraints.languageScore === undefined) return true;
-  const rows = programOf(university)?.language_requirements ?? [];
-  const matching = rows.filter((row) => matchesLanguageTest(row.test_type, constraints.languageTest ?? ""));
-  if (!matching.length) return !constraints.requireAll;
-  return matching.some((row) => {
-    const required = numericValue(row.minimum_score ?? row.overall_score);
-    return required !== undefined && constraints.languageScore !== undefined && constraints.languageScore >= required;
-  });
+function validLanguageScore(test: string, value: unknown) {
+  const score = numericValue(value);
+  if (score === undefined) return undefined;
+  if (test === "IELTS Academic") return score >= 4 && score <= 9 ? score : undefined;
+  if (test === "TOEFL iBT") return score >= 40 && score <= 120 ? score : undefined;
+  return score;
 }
 
-function minimumGpa(university: University) {
+function languageSubscoreRequirement(row: Record<string, unknown>) {
+  const structured = row.minimum_subscores;
+  if (structured && typeof structured === "object") {
+    const values = Object.values(structured).map(numericValue).filter((value): value is number => value !== undefined);
+    if (values.length) return Math.max(...values);
+  }
+  const text = [row.notes, row.evidence_quote, row.requirement_text].map((value) => cleanText(value)).join(" ");
+  const match = text.match(/(?:each\s*(?:band|component|section)|no\s*(?:band|component)\s*below|각\s*(?:영역|항목))[^\d]{0,20}(\d+(?:\.\d+)?)/i);
+  return match ? Number(match[1]) : undefined;
+}
+
+function languageEvaluation(university: University, constraints: QueryConstraints): ConditionCheck | undefined {
+  if (!constraints.languageTest || constraints.languageScore === undefined) return undefined;
+  const rows = programOf(university)?.language_requirements ?? [];
+  const matching = rows.filter((row) => matchesLanguageTest(row.test_type, constraints.languageTest ?? ""));
+  const valid = matching
+    .map((row) => ({ row, score: validLanguageScore(constraints.languageTest ?? "", row.minimum_score ?? row.overall_score) }))
+    .filter((item): item is { row: Record<string, unknown>; score: number } => item.score !== undefined);
+  if (!valid.length) return { key: "language", label: constraints.languageTest, state: "unknown", detail: `${constraints.languageTest} 유효 점수 미확인` };
+
+  const distinctScores = [...new Set(valid.map((item) => item.score))];
+  if (distinctScores.length > 1) {
+    return { key: "language", label: constraints.languageTest, state: "unknown", detail: `프로그램별 요구 점수 충돌 (${distinctScores.join(" / ")})` };
+  }
+  const required = distinctScores[0];
+  if (constraints.languageScore < required) {
+    return { key: "language", label: constraints.languageTest, state: "failed", detail: `요구 ${required}, 입력 ${constraints.languageScore}` };
+  }
+  const subscore = Math.max(...valid.map((item) => languageSubscoreRequirement(item.row) ?? -1));
+  if (subscore >= 0 && constraints.languageSubscore === undefined) {
+    return { key: "language", label: constraints.languageTest, state: "unknown", detail: `전체 ${required} 충족, 각 영역 ${subscore} 확인 필요` };
+  }
+  if (subscore >= 0 && (constraints.languageSubscore ?? -1) < subscore) {
+    return { key: "language", label: constraints.languageTest, state: "failed", detail: `각 영역 요구 ${subscore}, 입력 ${constraints.languageSubscore}` };
+  }
+  return { key: "language", label: constraints.languageTest, state: "met", detail: `요구 ${required}, 입력 ${constraints.languageScore}${subscore >= 0 ? ` · 각 영역 ${subscore} 충족` : ""}` };
+}
+
+function satisfiesLanguage(university: University, constraints: QueryConstraints) {
+  const evaluation = languageEvaluation(university, constraints);
+  return !evaluation || evaluation.state === "met";
+}
+
+function minimumGpaRequirement(university: University) {
+  const rawCorpus = [
+    university.summary,
+    university.profile_sections?.map((section) => section.summary).join(" "),
+    rowsText(programOf(university)?.application_deadlines),
+    rowsText(programOf(university)?.source_links),
+  ].join(" ");
+  const scaleMatch =
+    rawCorpus.match(/(?:gpa|grade point average|학점|평점)[^\d]{0,40}(\d+(?:\.\d+)?)[^\d]{0,24}(?:out of|\/|on a|scale|만점)[^\d]{0,12}(4(?:\.0|\.3|\.5)?|5(?:\.0)?|100)/i) ??
+    rawCorpus.match(/(\d+(?:\.\d+)?)\s*(?:\/|out of)\s*(4(?:\.0|\.3|\.5)?|5(?:\.0)?|100)[^\n]{0,60}(?:gpa|grade point average|학점|평점)/i);
+  if (scaleMatch) {
+    const value = Number(scaleMatch[1]);
+    const scale = Number(scaleMatch[2]);
+    if (Number.isFinite(value) && Number.isFinite(scale)) return { value, scale };
+  }
+
   const corpus = normalizeSearchText(
     [
       university.summary,
@@ -1068,14 +1242,21 @@ function minimumGpa(university: University) {
   const match = corpus.match(/(?:gpa|grade point average|평점|학점)\s*(?:of|out of|기준|:)?\s*(\d+(?:\.\d+)?)/i);
   if (!match) return undefined;
   const value = Number(match[1]);
-  return Number.isFinite(value) ? value : undefined;
+  if (!Number.isFinite(value)) return undefined;
+  const inferredScale = value > 5 ? 100 : value > 4.5 ? 5 : 4.5;
+  return { value, scale: inferredScale };
+}
+
+function convertSkkuGpa(userGpaFourPointFive: number, targetScale: number) {
+  if (targetScale === 100) return (userGpaFourPointFive / 4.5) * 100;
+  return (userGpaFourPointFive / 4.5) * targetScale;
 }
 
 function satisfiesGpa(university: University, constraints: QueryConstraints) {
   if (constraints.gpa === undefined) return true;
-  const required = minimumGpa(university);
-  if (required === undefined) return !constraints.requireAll;
-  return constraints.gpa >= required;
+  const required = minimumGpaRequirement(university);
+  if (required === undefined) return false;
+  return convertSkkuGpa(constraints.gpa, required.scale) >= required.value;
 }
 
 function satisfiesMajor(university: University, constraints: QueryConstraints) {
@@ -1100,6 +1281,10 @@ function satisfiesMajor(university: University, constraints: QueryConstraints) {
 
 function quotaValue(university: University) {
   const program = programOf(university);
+  for (const row of program?.quota_facts ?? []) {
+    const value = numericValue(row.quota ?? row.value ?? row.amount ?? row.value_text);
+    if (value !== undefined && value >= 0 && value <= 999) return value;
+  }
   const corpus = normalizeSearchText(
     [
       university.summary,
@@ -1117,8 +1302,7 @@ function deadlineRowTime(row: Record<string, unknown>) {
   const text = cleanText(row.deadline_date, cleanText(row.date, cleanText(row.deadline_text)));
   const iso = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
   if (iso) return Date.parse(iso);
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  return undefined;
 }
 
 function earliestDeadlineTime(university: University) {
@@ -1127,16 +1311,69 @@ function earliestDeadlineTime(university: University) {
   return times.length ? Math.min(...times) : Number.MAX_SAFE_INTEGER;
 }
 
+function deadlineSemesterOf(row: Record<string, unknown>): DeadlineSemester | undefined {
+  const text = normalizeSearchText(`${cleanText(row.semester)} ${cleanText(row.deadline_text)}`);
+  if (/autumn|fall|가을/.test(text)) return "autumn";
+  if (/spring|봄/.test(text)) return "spring";
+  return undefined;
+}
+
+function deadlineTypeOf(row: Record<string, unknown>): DeadlineType | undefined {
+  const text = normalizeSearchText(`${cleanText(row.deadline_type)} ${cleanText(row.deadline_text)}`);
+  if (/nomination|노미네이션|지명/.test(text)) return "nomination";
+  if (/application|지원/.test(text)) return "application";
+  return undefined;
+}
+
+function matchingDeadlineRows(university: University, constraints: QueryConstraints) {
+  const rows = programOf(university)?.application_deadlines ?? [];
+  return rows.filter((row) => {
+    const time = deadlineRowTime(row);
+    const year = time === undefined ? undefined : new Date(time).getUTCFullYear();
+    if (constraints.deadlineAcademicYear !== undefined && year !== constraints.deadlineAcademicYear) return false;
+    if (constraints.deadlineRequireClearYear && year === undefined) return false;
+    if (constraints.deadlineSemester && deadlineSemesterOf(row) !== constraints.deadlineSemester) return false;
+    if (constraints.deadlineType && deadlineTypeOf(row) !== constraints.deadlineType) return false;
+    return true;
+  });
+}
+
+function earliestMatchingDeadlineTime(university: University, constraints: QueryConstraints) {
+  const times = matchingDeadlineRows(university, constraints).map(deadlineRowTime).filter((value): value is number => value !== undefined);
+  return times.length ? Math.min(...times) : Number.MAX_SAFE_INTEGER;
+}
+
 function passesStructuredFilters(university: University, constraints: QueryConstraints) {
   if (constraints.requireEurope && !isEuropeanUniversity(university)) return false;
   if (!matchesCountry(university, constraints.countries)) return false;
+  if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) return false;
+  if (constraints.excludeAsia && isAsianUniversity(university)) return false;
   if (constraints.requireHousing && !(programOf(university)?.housing_options?.length)) return false;
+  if (constraints.requireHousingMissing && (programOf(university)?.housing_options?.length ?? 0) > 0) return false;
+  if (constraints.intent === "restriction") {
+    const rows = programOf(university)?.course_restrictions ?? [];
+    const evidence = rows.map(rowText).join(" ");
+    if (!/restricted|not available|approval required|prerequisite|limited|closed|수강 제한|전공 제한|선수 과목/i.test(evidence)) return false;
+  }
   if (!satisfiesLanguage(university, constraints)) return false;
   if (!satisfiesGpa(university, constraints)) return false;
   if (!satisfiesMajor(university, constraints)) return false;
   if (constraints.quotaMin !== undefined) {
     const quota = quotaValue(university);
     if (quota === undefined || quota < constraints.quotaMin) return false;
+  }
+  if (constraints.quotaMode === "exists" || constraints.quotaMode === "sort_desc" || constraints.requireQuotaKnown) {
+    if (quotaValue(university) === undefined) return false;
+  }
+  if (constraints.quotaMode === "missing" && quotaValue(university) !== undefined) return false;
+  if (constraints.requireGpaKnown && minimumGpaRequirement(university) === undefined) return false;
+  if (constraints.intent === "deadline") {
+    const deadlines = matchingDeadlineRows(university, constraints);
+    if (!deadlines.length) return false;
+    if (constraints.deadlineSpringOnly) {
+      const all = programOf(university)?.application_deadlines ?? [];
+      if (!all.some((row) => deadlineSemesterOf(row) === "spring") || all.some((row) => deadlineSemesterOf(row) === "autumn")) return false;
+    }
   }
   if (constraints.budgetKrwSemester !== undefined) {
     const cost = estimateSemesterCost(university, { requireClear: true });
@@ -1156,6 +1393,93 @@ function passesStructuredFilters(university: University, constraints: QueryConst
     }
   }
   return true;
+}
+
+function evaluateUniversity(university: University, constraints: QueryConstraints): EvaluatedUniversity {
+  const checks: ConditionCheck[] = [];
+  const add = (key: string, label: string, state: ConditionState, detail: string) => checks.push({ key, label, state, detail });
+
+  if (constraints.requireEurope) {
+    add("region", "관심 대륙", isEuropeanUniversity(university) ? "met" : "failed", isEuropeanUniversity(university) ? "유럽 대학" : "유럽 외 대학");
+  }
+  if (constraints.countries.length) {
+    add("country", "국가", matchesCountry(university, constraints.countries) ? "met" : "failed", university.country);
+  }
+  if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) {
+    add("excluded_country", "제외 국가", "failed", `${university.country}은(는) 제외 조건에 해당`);
+  }
+  if (constraints.excludeAsia && isAsianUniversity(university)) {
+    add("excluded_region", "제외 대륙", "failed", "아시아 대학은 제외 조건에 해당");
+  }
+
+  if (constraints.requireHousing) {
+    const rows = programOf(university)?.housing_options ?? [];
+    if (!rows.length) add("housing", "기숙사", "unknown", "기숙사 정보 미확인");
+    else if (rows.every((row) => row.housing_available === false)) add("housing", "기숙사", "failed", "기숙사 제공 안 함");
+    else add("housing", "기숙사", "met", housingGuaranteeSummary(university));
+  }
+
+  if (constraints.languageTest && constraints.languageScore !== undefined) {
+    const languageCheck = languageEvaluation(university, constraints);
+    if (languageCheck) checks.push(languageCheck);
+  }
+
+  if (constraints.gpa !== undefined) {
+    const required = minimumGpaRequirement(university);
+    if (!required) add("gpa", "최소 GPA", "unknown", "최소 GPA 미확인");
+    else {
+      const converted = convertSkkuGpa(constraints.gpa, required.scale);
+      add("gpa", "최소 GPA", converted >= required.value ? "met" : "failed", `성균관대 ${constraints.gpa}/4.5 → 약 ${converted.toFixed(2)}/${required.scale}, 요구 ${required.value}`);
+    }
+  }
+
+  if (constraints.major) {
+    add("major", "전공", satisfiesMajor(university, constraints) ? "met" : "unknown", satisfiesMajor(university, constraints) ? "관련 전공 정보 확인" : "전공 개설·수강 제한 미확인");
+  }
+  if (constraints.intent === "restriction") {
+    const rows = programOf(university)?.course_restrictions ?? [];
+    const evidence = rows.map(rowText).join(" ");
+    const hasRestriction = /restricted|not available|approval required|prerequisite|limited|closed|수강 제한|전공 제한|선수 과목/i.test(evidence);
+    add("restriction", "수강 제한", hasRestriction ? "met" : "unknown", hasRestriction ? cleanText(evidence).slice(0, 240) : "명시적 제한 근거 미확인");
+  }
+  if (constraints.requireGpaKnown && constraints.gpa === undefined) {
+    const required = minimumGpaRequirement(university);
+    add("gpa_exists", "GPA 근거", required ? "met" : "unknown", required ? `최소 GPA ${required.value}/${required.scale}` : "최소 GPA 미확인");
+  }
+  if (constraints.requireQuotaKnown && constraints.quotaMin === undefined && !constraints.quotaMode) {
+    const quota = quotaValue(university);
+    add("quota_exists", "Quota 근거", quota !== undefined ? "met" : "unknown", quota !== undefined ? `Quota ${quota}명` : "Quota 미확인");
+  }
+
+  if (constraints.quotaMin !== undefined) {
+    const quota = quotaValue(university);
+    if (quota === undefined) add("quota", "파견 정원", "unknown", "Quota 미확인");
+    else add("quota", "파견 정원", quota >= constraints.quotaMin ? "met" : "failed", `확인된 Quota ${quota}명`);
+  }
+  if (constraints.quotaMin === undefined && constraints.quotaMode) {
+    const quota = quotaValue(university);
+    if (constraints.quotaMode === "missing") {
+      add("quota", "파견 정원", quota === undefined ? "met" : "failed", quota === undefined ? "Quota 미확인" : `Quota ${quota}명 확인됨`);
+    } else {
+      add("quota", "파견 정원", quota === undefined ? "unknown" : "met", quota === undefined ? "Quota 미확인" : `Quota ${quota}명`);
+    }
+  }
+  if (constraints.requireHousingMissing) {
+    const hasHousing = (programOf(university)?.housing_options?.length ?? 0) > 0;
+    add("housing_missing", "기숙사 정보 없음", hasHousing ? "failed" : "met", hasHousing ? "기숙사 정보가 등록됨" : "기숙사 정보 미확인");
+  }
+
+  if (constraints.requireOfficialSource) {
+    const hasOfficial = universitySources(university).some((source) => source.is_official !== false && !isClearlyNonOfficialUrl(source.url));
+    add("official_source", "공식 출처", hasOfficial ? "met" : "unknown", hasOfficial ? "공식 출처 확인" : "공식 출처 미확인");
+  }
+
+  const status = checks.some((check) => check.state === "failed")
+    ? "excluded"
+    : checks.some((check) => check.state === "unknown")
+      ? "partial"
+      : "matched";
+  return { university, checks, status };
 }
 
 function sourceTypeLabel(value: unknown) {
@@ -1246,6 +1570,7 @@ function sourceScore(university: University, source: ChatSource, intent: Intent)
     cost: /cost|fee|tuition|housing|accommodation|living|비용|학비|등록금|기숙/,
     deadline: /application|deadline|nomination|calendar|마감|일정|지원/,
     quota: /fact|exchange|application|quota|정원/,
+    restriction: /restricted|restriction|prerequisite|approval|required|limited|course|subject/,
     source: /./,
     general: /exchange|incoming|fact|official/,
   };
@@ -1282,6 +1607,7 @@ function actionLabel(intent: Intent) {
   if (intent === "cost") return "비용 정보 보기";
   if (intent === "deadline") return "지원 일정 보기";
   if (intent === "quota") return "정원 정보 보기";
+  if (intent === "restriction") return "수강 제한 보기";
   if (intent === "source") return "출처 확인하기";
   return "상세 정보 보기";
 }
@@ -1390,7 +1716,75 @@ function makeCard(candidate: RankedCandidate, intent: Intent): ResultCard {
   };
 }
 
+function significantNameTokens(value: string) {
+  return normalizeSearchText(value)
+    .split(/\s+/)
+    .filter((token) => token.length >= 4 && !["university", "school", "college", "institute", "national"].includes(token));
+}
+
+function targetUniversityScore(university: University, question: string) {
+  const q = normalizeSearchText(question);
+  const name = normalizeSearchText(university.university_name);
+  const city = normalizeSearchText(university.city);
+  if (!q || !name) return 0;
+  if (q.includes(name)) return 100;
+
+  const tokens = significantNameTokens(university.university_name);
+  if (tokens.length >= 2 && tokens.every((token) => q.includes(token))) return 92;
+  if (tokens.length >= 1 && tokens.some((token) => q.includes(token)) && /university|school|college|대학|학교/.test(q)) return 72;
+  if (city && city.length >= 5 && q.includes(city) && tokens.some((token) => q.includes(token))) return 68;
+  return 0;
+}
+
+function findTargetUniversities(universities: University[], question: string) {
+  const ranked = universities
+    .map((university) => ({ university, score: targetUniversityScore(university, question) }))
+    .filter((item) => item.score >= 70)
+    .sort((a, b) => b.score - a.score);
+  const exact = ranked.filter((item) => item.score >= 90);
+  return (exact.length ? exact : ranked)
+    .map((item) => item.university)
+    .slice(0, 3);
+}
+
+function isFollowupReference(question: string) {
+  return /방금\s*(?:추천한|말한)|이\s*대학들|위\s*(?:학교|대학)|앞서\s*(?:추천한|언급한)|those\s*(?:universities|schools)|these\s*(?:universities|schools)/i.test(question.normalize("NFKC"));
+}
+
+function previousContextUniversities(universities: University[], messages: ChatMessage[]) {
+  const previousAssistant = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? "";
+  if (!previousAssistant) return [];
+  return universities.filter((university) => {
+    const normalizedAnswer = normalizeSearchText(previousAssistant);
+    const normalizedName = normalizeSearchText(university.university_name);
+    return normalizedName.length > 4 && normalizedAnswer.includes(normalizedName);
+  });
+}
+
+function explicitUnknownInstitution(question: string, exactTargets: University[]) {
+  if (exactTargets.length) return undefined;
+  const normalized = question.normalize("NFKC");
+  const match = normalized.match(/\b([A-Z][A-Za-z'&.-]*(?:\s+[A-Z][A-Za-z'&.-]*){1,7}\s+(?:University|College|School|Institute))\b/);
+  return match?.[1];
+}
+
 function selectCards(universities: University[], constraints: QueryConstraints, question: string) {
+  const exactTargets = findTargetUniversities(universities, question);
+  if (exactTargets.length) {
+    return exactTargets
+      .filter((university) => {
+        if (constraints.requireEurope && !isEuropeanUniversity(university)) return false;
+        if (!matchesCountry(university, constraints.countries)) return false;
+        if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) return false;
+        if (constraints.excludeAsia && isAsianUniversity(university)) return false;
+        return true;
+      })
+      .slice(0, constraints.topN)
+      .map((university) => {
+        return makeCard({ university, score: 100 }, constraints.intent);
+      });
+  }
+
   const pool = universities.filter((university) => passesStructuredFilters(university, constraints));
 
   if (constraints.intent === "cost" || constraints.budgetKrwSemester !== undefined) {
@@ -1415,12 +1809,103 @@ function selectCards(universities: University[], constraints: QueryConstraints, 
     .map((university) => ({ university, score: scoreUniversity(university, constraints.intent, question) }))
     .filter(({ score }, index) => score > 0 || (constraints.intent === "general" && index < constraints.topN))
     .sort((a, b) => {
-      if (constraints.sortDeadlineEarliest) return earliestDeadlineTime(a.university) - earliestDeadlineTime(b.university);
+      if (constraints.quotaMode === "sort_desc") return (quotaValue(b.university) ?? -1) - (quotaValue(a.university) ?? -1);
+      if (constraints.sortDeadlineEarliest) return earliestMatchingDeadlineTime(a.university, constraints) - earliestMatchingDeadlineTime(b.university, constraints);
       return b.score - a.score;
     })
     .slice(0, constraints.topN);
 
   return ranked.map((candidate) => makeCard(candidate, constraints.intent));
+}
+
+function hasRecommendationConditions(constraints: QueryConstraints) {
+  return Boolean(
+    constraints.requireEurope ||
+      constraints.countries.length ||
+      constraints.excludedCountries.length ||
+      constraints.excludeAsia ||
+      constraints.requireHousing ||
+      constraints.languageScore !== undefined ||
+      constraints.gpa !== undefined ||
+      constraints.major ||
+      constraints.quotaMin !== undefined ||
+      constraints.quotaMode !== undefined ||
+      constraints.requireGpaKnown ||
+      constraints.requireQuotaKnown ||
+      constraints.requireHousingMissing ||
+      constraints.requireOfficialSource,
+  );
+}
+
+function selectClassifiedCards(universities: University[], constraints: QueryConstraints, question: string) {
+  const evaluated = universities.map((university) => evaluateUniversity(university, constraints));
+  const rank = (items: EvaluatedUniversity[], limit: number) =>
+    items
+      .map((item) => ({ item, score: scoreUniversity(item.university, constraints.intent, question) }))
+      .sort((a, b) => {
+        if (constraints.quotaMode === "sort_desc") return (quotaValue(b.item.university) ?? -1) - (quotaValue(a.item.university) ?? -1);
+        if (constraints.sortDeadlineEarliest) return earliestMatchingDeadlineTime(a.item.university, constraints) - earliestMatchingDeadlineTime(b.item.university, constraints);
+        return b.score - a.score;
+      })
+      .slice(0, limit)
+      .map(({ item, score }) => {
+        const card = makeCard({ university: item.university, score }, constraints.intent);
+        card.match_status = item.status === "matched" ? "matched" : "partial";
+        card.condition_checks = item.checks;
+        card.unknown_fields = item.checks.filter((check) => check.state === "unknown").map((check) => check.label);
+        return card;
+      });
+
+  const matched = rank(evaluated.filter((item) => item.status === "matched"), Math.min(constraints.topN, 5));
+  const partiallyMatched = rank(evaluated.filter((item) => item.status === "partial"), 3);
+  const excluded = evaluated.filter((item) => item.status === "excluded");
+  return { matched, partiallyMatched, excluded };
+}
+
+function deterministicClassifiedAnswer(matched: ResultCard[], partiallyMatched: ResultCard[]) {
+  const lines: string[] = [];
+  const cell = (value: string) => cleanText(value).replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+  if (matched.length) {
+    lines.push(`### 조건 충족 대학 (${matched.length}개)`, "", "| 순위 | 대학 | 위치 | 확인된 조건 |", "|---:|---|---|---|");
+    matched.forEach((card, index) => {
+      const details = card.condition_checks?.filter((check) => check.state === "met").map((check) => `${check.label}: ${check.detail}`).join(" · ");
+      lines.push(`| ${index + 1} | **${cell(card.university_name)}** | ${cell(`${card.country} · ${card.city}`)} | ${cell(details || "요청 조건 충족")} |`);
+    });
+  } else {
+    lines.push("### 검색 결과", "", "모든 조건이 확인된 대학은 찾지 못했습니다.");
+  }
+  if (partiallyMatched.length) {
+    lines.push("", `### 추가 확인이 필요한 후보 (${partiallyMatched.length}개)`, "", "| 대학 | 확인된 조건 | 추가 확인 필요 |", "|---|---|---|");
+    partiallyMatched.forEach((card) => {
+      const known = card.condition_checks?.filter((check) => check.state === "met").map((check) => `${check.label}: ${check.detail}`).join(" · ");
+      lines.push(`| **${cell(card.university_name)}** | ${cell(known || "일부 대학 정보")} | ${cell(card.unknown_fields?.join(", ") || "세부 조건")} |`);
+    });
+    lines.push("", "> 위 후보는 일부 조건의 데이터가 없어 모든 조건을 충족한다고 확정할 수 없습니다.");
+  }
+  return lines.join("\n");
+}
+
+function restrictionEvidence(card: ResultCard[]) {
+  return card.flatMap((item) => [
+    ...(item.fact_bundle ?? []).map((fact) => `${fact.value} ${fact.evidence_quote ?? ""}`),
+    ...item.highlights,
+  ]).filter((text) => /restricted|not available|approval required|prerequisite|limited|closed|수강 제한|전공 제한|선수 과목/i.test(text));
+}
+
+function deterministicRestrictionAnswer(cards: ResultCard[]) {
+  const lines: string[] = ["### 확인된 수강 제한", ""];
+  let found = false;
+  for (const card of cards) {
+    const evidence = restrictionEvidence([card]);
+    if (!evidence.length) continue;
+    found = true;
+    lines.push(`- **${card.university_name}**`, ...evidence.slice(0, 3).map((text) => `  - ${cleanText(text).slice(0, 500)}`));
+  }
+  if (!found) {
+    return ["### 확인 결과", "", "명시적인 수강 제한 근거를 확인하지 못했습니다.", "", "- 전공명이 등장한다는 이유만으로 제한이 있다고 판단하지 않았습니다.", "- 지원 전 해당 대학의 최신 Course Catalog를 확인해 주세요."].join("\n");
+  }
+  lines.push("", "> 위 내용은 DB에 저장된 제한 문구만 정리했으며, 확인되지 않은 조건은 추가하지 않았습니다.");
+  return lines.join("\n");
 }
 
 function collectSources(cards: ResultCard[]): ChatSource[] {
@@ -1477,7 +1962,7 @@ function deterministicCostAnswer(cards: ResultCard[]) {
     return `| ${index + 1} | ${card.university_name} | ${card.country} · ${card.city} | ${cleanCell(cost.replace(/^학기 기준 비교 비용:\s*/, ""))} | ${housing.replace(/^기숙사 보장:\s*/, "")} | ${caution} |`;
   });
   return [
-    `현재 Supabase에 승인된 구조화 비용 필드를 기준으로, 학기 기준 비교 비용이 낮은 순서대로 ${cards.length}개 대학을 정리했습니다.`,
+    "### 비용 비교",
     "",
     "| 순위 | 대학 | 위치 | 학기 기준 비교 비용 | 기숙사 보장 여부 | 주의사항 |",
     "|---|---|---|---|---|---|",
@@ -1485,6 +1970,102 @@ function deterministicCostAnswer(cards: ResultCard[]) {
     "",
     "비용은 서로 다른 통화와 기간을 서버에서 학기 기준 KRW로 환산한 값입니다. 생활비가 없는 대학은 기숙사비 등 일부 비용만 기준으로 정렬될 수 있으므로, 실제 지원 전 공식 비용 페이지와 출처 카드를 반드시 확인해 주세요.",
   ].join("\n");
+}
+
+function deterministicDirectCostAnswer(cards: ResultCard[]) {
+  const cell = (value: string) => cleanText(value).replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+  const rows = cards.flatMap((card) => {
+    const facts = (card.fact_bundle ?? [])
+      .filter((fact) => fact.table === "cost_facts" || fact.table === "housing_facts")
+      .map((fact) => fact.value)
+      .filter(Boolean)
+      .slice(0, 4);
+    return facts.map((fact) => `| **${cell(card.university_name)}** | ${cell(fact)} |`);
+  });
+
+  return [
+    "### 확인된 비용 정보",
+    "",
+    ...(rows.length ? ["| 대학 | 비용과 과금 기간 |", "|---|---|", ...rows] : ["공식 비용 금액을 확인하기 어렵습니다."]),
+    "",
+    "### 확인사항",
+    "- 금액은 원래 통화와 과금 기간을 그대로 표시했습니다.",
+    "- 개인 지출을 포함한 총비용으로 합산하지 않았습니다.",
+  ].join("\n");
+}
+
+function deterministicFactAnswer(cards: ResultCard[], intent: "housing" | "language") {
+  const cell = (value: string) => cleanText(value).replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+  const title = intent === "housing" ? "기숙사 정보" : "어학 조건";
+  const rows = cards.flatMap((card) => {
+    const facts = (card.fact_bundle ?? []).filter((fact) =>
+      intent === "housing" ? fact.table === "housing_facts" : fact.table === "language_requirements",
+    );
+    const values = facts.length
+      ? facts.map((fact) => fact.value)
+      : card.highlights.filter((value) =>
+          intent === "housing" ? /기숙|주거|housing|accommodation|residence/i.test(value) : /IELTS|TOEFL|CEFR|어학|English/i.test(value),
+        );
+    return values.filter(Boolean).slice(0, 5).map((value) => `| **${cell(card.university_name)}** | ${cell(value)} |`);
+  });
+
+  return [
+    `### ${title}`,
+    "",
+    ...(rows.length ? ["| 대학 | 확인된 내용 |", "|---|---|", ...rows] : ["현재 등록된 자료에서 확인할 수 있는 정보가 없습니다."]),
+    "",
+    "### 확인사항",
+    intent === "housing"
+      ? "- 금액·보장 여부·신청 일정이 저장되지 않은 경우 임의로 추정하지 않습니다."
+      : "- 시험별 최소 점수와 세부 영역 점수는 확인된 값만 표시합니다.",
+    "- 최신 정보는 아래 공식 근거에서 다시 확인해 주세요.",
+  ].join("\n");
+}
+
+function sanitizeGeneratedAnswer(value: string) {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !/(?:€|EUR|USD|GBP|KRW|원|달러|파운드)?\s*(?:XXX|TBD|미정)(?:\s*(?:€|EUR|USD|GBP|KRW|원|달러|파운드))?/i.test(line))
+    .filter((line) => !/^현재 Supabase(?:의|에)\b/.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function plainTextSummary(value: string, maxLength = 320) {
+  const text = value
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+}
+
+function shortAnswerFor(cards: ResultCard[], detailedAnswer: string) {
+  if (cards.length === 1) {
+    const card = cards[0];
+    const points = card.highlights.filter(Boolean).slice(0, 3).map((item) => `- ${plainTextSummary(item, 90)}`);
+    return [`**${card.university_name}**의 확인된 정보를 정리했습니다.`, ...points].join("\n");
+  }
+
+  if (cards.length > 1) {
+    const names = cards.slice(0, 3).map((card) => `- ${card.university_name}`);
+    const suffix = cards.length > 3 ? `\n- 그 외 ${cards.length - 3}개 대학` : "";
+    return [`조건과 관련된 대학 ${cards.length}개를 찾았습니다.`, ...names].join("\n") + suffix;
+  }
+
+  return plainTextSummary(detailedAnswer);
+}
+
+function responsePresentation(detailedAnswer: string, cards: ResultCard[]) {
+  return {
+    answer: detailedAnswer,
+    shortAnswer: shortAnswerFor(cards, detailedAnswer),
+    detailedAnswer,
+  };
 }
 
 function deterministicDeadlineAnswer(cards: ResultCard[]) {
@@ -1499,13 +2080,15 @@ function deterministicDeadlineAnswer(cards: ResultCard[]) {
   });
 
   return [
-    `현재 Supabase의 application_deadlines 구조화 필드를 기준으로, 등록된 날짜가 빠른 순서대로 ${cards.length}개 대학을 정리했습니다.`,
+    "### 지원 마감일 비교",
     "",
     "| 순위 | 대학 | 위치 | 가장 빠른 등록 마감일 | 함께 확인할 일정 |",
     "|---|---|---|---|---|",
     ...rows,
     "",
-    "위 표의 날짜와 문구는 Solar가 새로 추측한 값이 아니라 서버가 선택한 application_deadlines fact 값을 그대로 사용한 것입니다. 성균관대학교 내부 접수 일정과 상대교 nomination/application 일정은 다를 수 있으니, 실제 지원 전 출처 카드의 공식 페이지를 다시 확인해 주세요.",
+    "### 확인사항",
+    "- 성균관대학교 내부 접수 일정과 상대교 일정은 다를 수 있습니다.",
+    "- 실제 지원 전 아래 공식 출처에서 최신 일정을 확인해 주세요.",
   ].join("\n");
 }
 
@@ -1520,7 +2103,13 @@ function systemPrompt(context: string, cards: ResultCard[], intent: Intent) {
 - DB에 값이 없으면 0을 쓰지 말고 "확인 필요"라고 표시하세요.
 - 지원 마감일, GPA, 어학 요건, 기숙사, 비용, 수강 제한은 구분해서 설명하세요.
 - 여러 대학을 추천할 때는 이유를 짧게 비교하세요.
-- 2개 이상의 대학을 비교할 때만 GFM Markdown 표를 사용할 수 있습니다.
+- 답변은 반드시 "### 핵심 답변"으로 시작하고, 긴 서론과 인사말은 생략하세요.
+- 한 대학의 정보 조회는 "| 항목 | 확인된 내용 |" 2열 표로 정리하세요.
+- 여러 대학의 비교·추천은 대학별 핵심 조건을 GFM Markdown 표로 정리하세요.
+- 표 아래에는 필요한 경우에만 "### 주의사항" 불릿 목록을 최대 3개 작성하세요.
+- UUID, fact_id, confidence, review_status, 내부 테이블명, JSON 원문을 답변에 노출하지 마세요.
+- evidence_quote를 통째로 복사하지 말고 질문에 필요한 한 문장만 한국어로 요약하세요.
+- DB에 없는 금액을 XXX, TBD, N/A 같은 자리표시자로 만들지 말고 해당 금액 항목을 생략하세요.
 - 표는 코드 블록 안에 넣지 말고, 최대 5개 열만 사용하세요.
 - 출처 URL은 서버가 별도 카드로 제공하므로 답변 본문에서 없는 링크를 만들지 마세요.
 - API 키, 내부 환경변수, 서버 설정은 절대 공개하지 마세요.
@@ -1540,6 +2129,29 @@ function outOfScopeResponse() {
     cards: [],
     sources: [],
     searchMode: "범위 밖 질문 거절",
+  });
+}
+
+function unsupportedDataResponse(reason?: QueryConstraints["unsupportedReason"]) {
+  if (reason === "cost_of_living_index") {
+    return NextResponse.json({
+      answer:
+        "현재 웹페이지 내 데이터베이스 정보로 말씀드릴 수 없는 정보입니다.\n\n- 지금 DB에는 대학별 교환학생 지원 조건, 어학 성적, 일정, 기숙사, 일부 비용 정보가 중심으로 저장되어 있습니다.\n- 한국과의 국가별 물가 지수 비교는 별도 지표 데이터가 필요합니다.\n- 이 기능을 정확히 제공하려면 Numbeo 같은 외부 물가 지표를 별도 테이블로 저장하고, 기준일과 출처를 함께 표시해야 합니다.",
+      cards: [],
+      sources: [],
+      searchMode: "DB 미보유 데이터 요청",
+    });
+  }
+  return outOfScopeResponse();
+}
+
+function removedCostFeatureResponse() {
+  return NextResponse.json({
+    answer:
+      "비용 데이터의 기준이 대학마다 달라 현재 챗봇에서는 대학 간 총비용 순위, 예산 이하 추천, 한 학기 예상 비용 계산을 제공하지 않습니다.\n\n- 특정 대학의 공식 기숙사비·생활비처럼 DB에 명시된 개별 비용은 확인할 수 있습니다.\n- 금액은 원래 통화와 원래 기간(월·학기·연간) 그대로 안내합니다.\n- 예: `University of Helsinki의 공식 기숙사 비용을 알려줘.`",
+    cards: [],
+    sources: [],
+    searchMode: "회의 결정에 따라 비용 비교·예산 추천 제외",
   });
 }
 
@@ -1569,34 +2181,89 @@ export async function POST(request: Request) {
     const universities = await getChatUniversities();
     const question = messages.at(-1)?.content ?? "";
     const constraints = detectConstraints(question);
-    if (!constraints.inScope) return outOfScopeResponse();
+    if (!constraints.inScope) return unsupportedDataResponse(constraints.unsupportedReason);
 
     const intent = constraints.intent;
-    const cards = selectCards(universities, constraints, question);
+    const exactTargets = findTargetUniversities(universities, question);
+    const unknownInstitution = explicitUnknownInstitution(question, exactTargets);
+    if (unknownInstitution) {
+      return NextResponse.json({
+        answer: `현재 등록된 53개 교환대학에서 **${unknownInstitution}**을(를) 찾지 못했습니다. 비슷한 이름의 다른 대학을 대신 추천하지 않았습니다.`,
+        cards: [],
+        sources: [],
+        searchMode: "등록 대학명 정확 일치 검사 결과 없음",
+      });
+    }
+    const followupTargets = isFollowupReference(question) ? previousContextUniversities(universities, messages.slice(0, -1)) : [];
+    const candidateUniversities = followupTargets.length ? followupTargets : universities;
+    if (intent === "cost" && isRemovedCostRecommendation(question, exactTargets.length)) {
+      return removedCostFeatureResponse();
+    }
+    const useClassification = !exactTargets.length && hasRecommendationConditions(constraints) && intent !== "cost" && intent !== "deadline";
+    const classified = useClassification ? selectClassifiedCards(candidateUniversities, constraints, question) : undefined;
+    const cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
     if (!cards.length) {
       return NextResponse.json({
-        answer: "현재 Supabase에 승인된 구조화 데이터 기준으로는 질문 조건을 모두 만족하는 대학을 찾지 못했습니다. 비용, 어학, 전공, 기숙사 중 일부 값이 미확인인 대학은 조건 충족으로 처리하지 않았습니다.",
+        answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
         cards: [],
         sources: [],
         searchMode: "Supabase 구조화 필드 필터링 결과 없음",
       });
     }
 
-    if (intent === "cost" || constraints.budgetKrwSemester !== undefined) {
+    if (classified) {
+      const detailedAnswer = deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
       return NextResponse.json({
-        answer: deterministicCostAnswer(cards),
+        ...responsePresentation(detailedAnswer, cards),
+        cards,
+        matched: classified.matched,
+        partially_matched: classified.partiallyMatched,
+        excluded_count: classified.excluded.length,
+        unknown_fields: [...new Set(classified.partiallyMatched.flatMap((card) => card.unknown_fields ?? []))],
+        sources: collectSources(cards),
+        searchMode: "Supabase 구조화 조건 판정(충족/부분 확인/미충족)",
+      });
+    }
+
+    if (intent === "cost") {
+      const detailedAnswer = deterministicDirectCostAnswer(cards);
+      return NextResponse.json({
+        ...responsePresentation(detailedAnswer, cards),
         cards,
         sources: collectSources(cards),
-        searchMode: "Supabase fact tables(cost/housing/language/deadline) 우선 필터링/정렬 + 서버 검증 답변",
+        searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)",
       });
     }
 
     if (intent === "deadline") {
+      const detailedAnswer = deterministicDeadlineAnswer(cards);
       return NextResponse.json({
-        answer: deterministicDeadlineAnswer(cards),
+        ...responsePresentation(detailedAnswer, cards),
         cards,
         sources: collectSources(cards),
         searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변",
+      });
+    }
+
+
+    if (intent === "restriction") {
+      const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
+      const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
+      return NextResponse.json({
+        ...responsePresentation(detailedAnswer, supportedCards),
+        cards: supportedCards,
+        sources: collectSources(supportedCards),
+        searchMode: "Supabase 수강 제한 근거 직접 조회",
+      });
+    }
+
+    if (intent === "housing" || intent === "language") {
+      const detailedAnswer = deterministicFactAnswer(cards, intent);
+      return NextResponse.json({
+        ...responsePresentation(detailedAnswer, cards),
+        cards,
+        sources: collectSources(cards),
+        searchMode: searchMode(intent),
       });
     }
 
@@ -1641,13 +2308,13 @@ export async function POST(request: Request) {
     const result = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const answer = result.choices?.[0]?.message?.content?.trim();
+    const answer = sanitizeGeneratedAnswer(result.choices?.[0]?.message?.content?.trim() ?? "");
     if (!answer) {
       return NextResponse.json({ error: "AI가 빈 답변을 반환했습니다." }, { status: 502 });
     }
 
     return NextResponse.json({
-      answer,
+      ...responsePresentation(answer, cards),
       cards,
       sources: collectSources(cards),
       searchMode: searchMode(intent),
