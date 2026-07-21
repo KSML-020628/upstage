@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getUniversity } from "../../lib/supabase";
 import { Header } from "../../ui/Header";
+import { UniversityCover, UniversityLogo } from "../../ui/LocalMedia";
 
 type RowValue = Record<string, unknown>;
 
@@ -167,6 +168,8 @@ export default async function UniversityDetail({ params }: { params: Promise<{ i
       <style>{detailCardCss}</style>
       <Header />
       <section className="detail-hero">
+        <UniversityCover name={university.university_name} fallback={university.image_url} className="detail-university-cover" />
+        <UniversityLogo name={university.university_name} className="detail-university-logo" />
         <Link href="/universities">← 대학 목록</Link>
         <p className="eyebrow">
           {university.country} · {university.city}

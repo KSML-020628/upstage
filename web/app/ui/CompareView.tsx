@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { ExchangeProgram, University } from "../lib/types";
+import { UniversityLogo } from "./LocalMedia";
 
 type Row = Record<string, unknown>;
 const pending = "정보 확인 중";
@@ -80,7 +81,7 @@ export function CompareView({ universities }: { universities: University[] }) {
   return <>
     <section className="compare-hero"><p className="eyebrow">SIDE BY SIDE</p><h1>대학 비교</h1><p>모든 대학을 같은 집계 기준으로 비교합니다. 줄바꿈된 내용은 복수 기준이 확인된 항목입니다.</p></section>
     <section className="compare-table">
-      <div className="compare-row compare-head"><div className="row-label">비교 대학</div>{slots.map((slot) => <div className="compare-school" key={slot}><select value={ids[slot] ?? ""} onChange={(event) => setIds((current) => { const next = [...current]; next[slot] = event.target.value; return next; })}><option value="">대학 선택</option>{universities.map((item) => <option value={item.id} key={item.id}>{item.university_name}</option>)}</select>{ids[slot] && <><h2>{universities.find((item) => item.id === ids[slot])?.university_name}</h2><Link href={`/universities/${ids[slot]}`}>상세 보기 →</Link></>}</div>)}</div>
+      <div className="compare-row compare-head"><div className="row-label">비교 대학</div>{slots.map((slot) => {const university=universities.find((item)=>item.id===ids[slot]);return <div className="compare-school" key={slot}><select value={ids[slot] ?? ""} onChange={(event) => setIds((current) => { const next = [...current]; next[slot] = event.target.value; return next; })}><option value="">대학 선택</option>{universities.map((item) => <option value={item.id} key={item.id}>{item.university_name}</option>)}</select>{university&&<><UniversityLogo name={university.university_name} className="compare-university-logo"/><h2>{university.university_name}</h2><Link href={`/universities/${university.id}`}>상세 보기 →</Link></>}</div>;})}</div>
       {rows.map((row) => <div className="compare-row" key={row.label}><div className="row-label">{row.label}</div>{slots.map((slot) => { const university = universities.find((item) => item.id === ids[slot]); return <div className="compare-value" key={slot}>{university ? row.get(university) : "—"}</div>; })}</div>)}
     </section>
   </>;
