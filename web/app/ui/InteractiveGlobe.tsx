@@ -5,6 +5,7 @@ import { feature } from "topojson-client";
 import worldData from "world-atlas/countries-110m.json";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { University } from "../lib/types";
+import { countryDisplayName } from "../lib/country-data";
 
 type CountryGroup = { country: string; latitude: number; longitude: number; universities: University[] };
 const SIZE = 800;
@@ -51,7 +52,10 @@ export function InteractiveGlobe({ universities, onCountryClick }: { universitie
   const [dragging, setDragging] = useState(false);
   const groups = useMemo<CountryGroup[]>(() => {
     const grouped = new Map<string,University[]>();
-    universities.forEach((item) => grouped.set(item.country,[...(grouped.get(item.country) ?? []),item]));
+    universities.forEach((item) => {
+      const country = countryDisplayName(item.country);
+      grouped.set(country, [...(grouped.get(country) ?? []), item]);
+    });
     return [...grouped.entries()].flatMap(([country,items]) => {
       const countryPoint = countryCoordinates[country];
       if (countryPoint) return [{ country, universities:items, latitude:countryPoint[1], longitude:countryPoint[0] }];

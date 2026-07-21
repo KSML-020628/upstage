@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { ExchangeProgram, University } from "../lib/types";
+import { presentCost, presentHousingRow, presentLanguage } from "../lib/display/present-fact";
 import { UniversityLogo } from "./LocalMedia";
 
 type Row = Record<string, unknown>;
@@ -18,9 +19,8 @@ function summarizeLanguages(university: University) {
   const selected = (preferred.length ? preferred : rows).slice(0, 2);
   if (!selected.length) return pending;
   return unique(selected.map((row) => {
-    const details = row.score_details as Row | undefined;
-    const score = row.overall_score ?? row.level;
-    return `${text(row.test_type)} ${text(score)}${details?.description ? ` (${details.description})` : ""}`;
+    const field = presentLanguage(row);
+    return `${field.label} · ${field.value ?? "확인 필요"}`;
   })).join("\n");
 }
 
@@ -37,25 +37,19 @@ function summarizePeriods(university: University) {
 function summarizeHousing(university: University) {
   const rows = programOf(university)?.housing_options ?? [];
   if (!rows.length) return pending;
-  const minimums = rows.map((row) => Number(row.cost_min)).filter(Number.isFinite);
-  const maximums = rows.map((row) => Number(row.cost_max)).filter(Number.isFinite);
-  const currency = text(rows.find((row) => row.currency)?.currency);
-  const periods = unique(rows.map((row) => text(row.billing_period))).slice(0, 2).join(" / ");
-  if (minimums.length || maximums.length) {
-    const minimum = Math.min(...(minimums.length ? minimums : maximums));
-    const maximum = Math.max(...(maximums.length ? maximums : minimums));
-    return `${currency} ${minimum.toLocaleString()} – ${maximum.toLocaleString()}\n${periods}`;
-  }
-  return unique(rows.map((row) => text(row.cost_text))).slice(0, 2).join("\n") || pending;
+  const values = rows.flatMap((row) => presentHousingRow(row))
+    .filter((field) => field.value && ["housing_cost", "housing_available", "housing_guaranteed"].includes(field.key))
+    .map((field) => `${field.label} · ${field.value}`);
+  return unique(values).slice(0, 4).join("\n") || pending;
 }
 
 function summarizeCosts(university: University) {
   const rows = programOf(university)?.estimated_costs ?? [];
   if (!rows.length) return pending;
-  return unique(rows.map((row) => row.original_text
-    ? `${text(row.cost_type)}: ${text(row.original_text)}`
-    : `${text(row.cost_type)}: ${text(row.currency)} ${text(row.amount_min)} – ${text(row.amount_max)} (${text(row.billing_period)})`,
-  )).slice(0, 3).join("\n");
+  return unique(rows.map((row) => {
+    const field = presentCost(row);
+    return `${field.label} · ${field.value ?? "확인된 금액 없음"}`;
+  })).slice(0, 3).join("\n");
 }
 
 function summarizeDocuments(university: University) {

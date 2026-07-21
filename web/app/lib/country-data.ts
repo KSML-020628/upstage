@@ -180,6 +180,17 @@ export const countryProfiles: Record<string, CountryProfile> = {
   },
 };
 
+Object.assign(countryProfiles, {
+  Indonesia: { continent: "아시아", currency: "IDR", currencyName: "인도네시아 루피아", languages: "인도네시아어, 영어", costLevel: "낮은 편", semesterBudget: "도시와 주거 형태에 따라 차이가 큼", housing: "대학 연계 숙소와 민간 임대를 함께 비교하세요.", transport: "도시별 교통 혼잡과 통학 시간을 확인해야 합니다.", life: "기후와 지역별 생활환경 차이를 고려하세요." },
+  Japan: { continent: "아시아", currency: "JPY", currencyName: "일본 엔", languages: "일본어, 영어", costLevel: "중간", semesterBudget: "도쿄 등 대도시는 주거비 비중이 높음", housing: "대학 기숙사와 민간 학생회관의 비용과 통학 시간을 비교하세요.", transport: "철도망이 발달했지만 정기권 비용을 예산에 포함해야 합니다.", life: "도시별 주거비 차이와 기본 일본어 필요성을 고려하세요." },
+  Netherlands: { continent: "유럽", currency: "EUR", currencyName: "유로", languages: "네덜란드어, 영어", costLevel: "높은 편", semesterBudget: "주거 공급 부족으로 숙소 비용 확인이 중요함", housing: "학생 주거 경쟁이 높아 입학 확정 후 빠른 신청이 필요합니다.", transport: "철도와 자전거 이용이 편리합니다.", life: "영어 접근성이 높지만 주거 확보를 우선해야 합니다." },
+  Peru: { continent: "남아메리카", currency: "PEN", currencyName: "페루 솔", languages: "스페인어, 영어", costLevel: "낮은 편", semesterBudget: "지역과 생활 방식에 따라 차이가 큼", housing: "학교 추천 숙소와 홈스테이의 위치와 안전을 비교하세요.", transport: "도시별 교통과 통학 동선을 사전에 확인하세요.", life: "기본 스페인어와 지역별 안전 정보를 준비하세요." },
+  Sweden: { continent: "유럽", currency: "SEK", currencyName: "스웨덴 크로나", languages: "스웨덴어, 영어", costLevel: "높은 편", semesterBudget: "주거비와 식비 비중이 높은 편", housing: "학생 주거는 조기 신청이 중요하며 배정 보장 여부를 확인해야 합니다.", transport: "도시 교통과 철도망이 안정적입니다.", life: "영어 사용이 편리하지만 겨울 생활 준비가 필요합니다." },
+  Thailand: { continent: "아시아", currency: "THB", currencyName: "태국 바트", languages: "태국어, 영어", costLevel: "낮은 편", semesterBudget: "주거 위치와 생활 방식에 따라 달라짐", housing: "기숙사와 민간 콘도의 계약 조건을 비교하세요.", transport: "방콕은 철도 접근성과 통학 시간을 함께 확인하세요.", life: "기후와 현지 행정 절차를 미리 확인하세요." },
+  Turkey: { continent: "아시아", currency: "TRY", currencyName: "튀르키예 리라", languages: "튀르키예어, 영어", costLevel: "낮은 편", semesterBudget: "환율 변동이 커 최신 비용 확인이 필요함", housing: "기숙사와 민간 임대의 계약 통화와 보증금을 확인하세요.", transport: "대도시는 대중교통망이 발달했습니다.", life: "환율 변동과 지역별 생활환경 차이를 고려하세요." },
+  Vietnam: { continent: "아시아", currency: "VND", currencyName: "베트남 동", languages: "베트남어, 영어", costLevel: "낮은 편", semesterBudget: "주거와 식비가 비교적 낮지만 도시별 차이가 있음", housing: "대학 연계 숙소와 민간 임대의 통학 동선을 비교하세요.", transport: "교통 혼잡과 이동 시간을 고려해야 합니다.", life: "기후와 기본 현지어 표현을 준비하면 좋습니다." },
+} satisfies Record<string, CountryProfile>);
+
 export const continentOrder: ContinentName[] = ["유럽", "아시아", "북아메리카", "남아메리카", "오세아니아", "아프리카"];
 
 function normalizeCountryName(country: string): string {
@@ -215,8 +226,8 @@ export function continentFor(country: string): ContinentName {
 export function countryProfile(country: string): CountryProfile {
   return findCountryEntry(country)?.[1] ?? {
     continent: continentFor(country),
-    currency: "USD",
-    currencyName: "미국 달러",
+    currency: "",
+    currencyName: "통화 정보 확인 필요",
     languages: "국가별 확인 필요",
     costLevel: "확인 필요",
     semesterBudget: "대학 및 도시별 확인 필요",

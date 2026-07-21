@@ -63,6 +63,13 @@ const QUICK_QUESTIONS = [
   "지원 마감일이 빠른 유럽 대학 3개 보여줘.",
 ];
 
+const V2_STAGES = [
+  "Solar Pro 3가 질문의 조건을 분석하고 있습니다.",
+  "Solar Pro 3의 분석을 바탕으로 대학 데이터를 검색하고 있습니다.",
+  "후보 대학의 조건과 출처를 검증하고 있습니다.",
+  "Solar Pro 3가 검증된 결과를 정리하고 있습니다.",
+];
+
 function inferIntent(card?: ChatResultCard, fallbackText = "") {
   const text = `${fallbackText} ${card?.action_label ?? ""} ${card?.highlights?.join(" ") ?? ""}`.toLowerCase();
   if (/비용|cost|fee|tuition|living/.test(text)) return "cost";
@@ -370,6 +377,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState(0);
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [detailResponse, setDetailResponse] = useState<ChatDetailResponse | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -391,6 +399,12 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     return () => window.removeEventListener("keydown", closeWithEscape);
   }, [isPanel]);
 
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStage(0);
+    }
+  }, [loading]);
+
   function resetChat() {
     setMessages([WELCOME]);
     setInput("");
@@ -410,15 +424,21 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     setLoading(true);
 
     try {
+      const contextUniversityIds = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant" && message.cards?.length)
+        ?.cards?.map((card) => card.university_id)
+        .slice(0, 8) ?? [];
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
           sessionId,
+          contextUniversityIds,
           messages: nextMessages.slice(-8).map(({ role, content }) => ({ role, content })),
         }),
       });
-      const result = (await response.json()) as {
+      type ApiResult = {
         answer?: string;
         shortAnswer?: string;
         detailedAnswer?: string;
@@ -426,7 +446,32 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
         sources?: ChatSource[];
         cards?: ChatResultCard[];
         searchMode?: string;
+        solarUsed?: { planner: boolean; reasoner: boolean };
+        fallbackUsed?: boolean;
+        suggestedDetailTab?: string;
       };
+      let result: ApiResult = {};
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("응답 스트림을 열 수 없습니다.");
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as { type?: string; stage?: string; message?: string; data?: ApiResult };
+          if (event.type === "status") {
+            const stageIndex = ["planning", "searching", "validating", "reasoning"].indexOf(event.stage ?? "");
+            if (stageIndex >= 0) setLoadingStage(stageIndex);
+          }
+          if (event.type === "result" && event.data) result = event.data;
+          if (event.type === "error") throw new Error(event.message || "챗봇 요청에 실패했습니다.");
+        }
+      }
 
       const cards = result.cards ?? [];
       const sources = result.sources ?? [];
@@ -480,7 +525,9 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
   const panel = (
     <section className="chatbot-panel" role={isPanel ? "region" : "dialog"} aria-label="교환대학 AI 도우미">
       <header className="chatbot-header">
-        <div className="chatbot-avatar">AI</div>
+        <div className="chatbot-avatar">
+          <img src="/images/upstage-color.png" alt="Upstage" />
+        </div>
         <div>
           <strong>Exchange Atlas AI</strong>
           <span>
@@ -517,7 +564,8 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
           </div>
         )}
         {loading && (
-          <div className="chat-message assistant chatbot-typing">
+          <div className="chat-message assistant chatbot-typing" role="status">
+            <span>{V2_STAGES[loadingStage]}</span>
             <i />
             <i />
             <i />
@@ -578,7 +626,9 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
           aria-expanded={open}
           aria-label={open ? "챗봇 닫기" : "교환대학 AI 도우미 열기"}
         >
-          <span>{open ? "×" : "AI"}</span>
+          <span>
+            {open ? "×" : <img src="/images/upstage-color.png" alt="Upstage" />}
+          </span>
           {!open && <b>대학 정보 물어보기</b>}
         </button>
       </div>

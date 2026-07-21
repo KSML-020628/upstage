@@ -2,10 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  costIndexCountries,
+  costIndexCountry,
+  costIndexCountryLabel,
+  costOfLivingIndex,
+  NUMBEO_SNAPSHOT_DATE,
+  OECD_FALLBACK_PERIOD,
+} from "../lib/cost-of-living";
 import { countryDisplayName, countryProfile } from "../lib/country-data";
 import type { University } from "../lib/types";
+import { CountryCover, UniversityLogo } from "./LocalMedia";
 
 type Rate = { date: string; base: string; quote: string; rate: number };
+type OecdCostData = { source: "OECD"; period: string; base: string; indices: Record<string, number>; fallback?: boolean };
 
 export function CountryDetailPanel({
   country,
@@ -23,8 +33,39 @@ export function CountryDetailPanel({
   const [tab, setTab] = useState<"life" | "universities">("life");
   const [rate, setRate] = useState<Rate | null>(null);
   const [rateError, setRateError] = useState(false);
+  const [comparisonCountry, setComparisonCountry] = useState("South Korea");
+  const [oecdData, setOecdData] = useState<OecdCostData | null>(null);
+  const [oecdError, setOecdError] = useState(false);
   const profile = countryProfile(country);
   const displayName = countryDisplayName(country);
+  const countryCostProfile = costIndexCountry(displayName);
+  const comparisonCostProfile = costIndexCountry(comparisonCountry);
+  const oecdIndices = oecdData?.indices ?? {};
+  const countryCostIndex = costOfLivingIndex(displayName, oecdIndices);
+  const comparisonCostIndex = costOfLivingIndex(comparisonCountry, oecdIndices);
+  const comparisonLabel = costIndexCountryLabel(comparisonCountry);
+  const differentSources = countryCostProfile?.source !== comparisonCostProfile?.source;
+  const costDifferencePercent = countryCostIndex === undefined || comparisonCostIndex === undefined
+    ? undefined
+    : ((countryCostIndex / comparisonCostIndex) - 1) * 100;
+
+  const sourceCaption = (source: "OECD" | "Numbeo" | undefined) => {
+    if (source === "OECD" && oecdData?.fallback) return `${oecdData.period} 최근 확인값`;
+    if (source === "Numbeo") return `${NUMBEO_SNAPSHOT_DATE} 확인`;
+    if (oecdData) return `${oecdData.period} · 월별 자동 갱신`;
+    if (oecdError) return `${OECD_FALLBACK_PERIOD} 최근 확인값`;
+    return "최신 월간값 확인 중";
+  };
+
+  useEffect(() => {
+    fetch("/api/cost-of-living")
+      .then((response) => {
+        if (!response.ok) throw new Error("OECD");
+        return response.json() as Promise<OecdCostData>;
+      })
+      .then(setOecdData)
+      .catch(() => setOecdError(true));
+  }, []);
 
   useEffect(() => {
     setTab("life");
@@ -82,6 +123,7 @@ export function CountryDetailPanel({
 
       {tab === "life" ? (
         <div className="country-life">
+          <CountryCover name={displayName} universityName={universities[0]?.university_name} className="country-cover" />
           <div className="exchange-card">
             <small>최근 기준 환율</small>
             {rate ? (
@@ -110,14 +152,39 @@ export function CountryDetailPanel({
               <b>{profile.languages}</b>
             </div>
             <div>
-              <small>생활비 수준</small>
-              <b>{profile.costLevel}</b>
+              <small>{displayName} 물가지수</small>
+              <b className="cost-index-value">{countryCostIndex?.toFixed(1) ?? "확인 중"}</b>
+              {costDifferencePercent !== undefined && (
+                Math.abs(costDifferencePercent) < 0.05
+                  ? <span className="cost-same">{comparisonLabel}과 동일</span>
+                  : <span className={costDifferencePercent > 0 ? "cost-higher" : "cost-lower"}>
+                      {comparisonLabel}보다 {Math.abs(costDifferencePercent).toFixed(1)}% {costDifferencePercent > 0 ? "높음" : "낮음"}
+                    </span>
+              )}
+              <span className={`cost-source-badge ${countryCostProfile?.source.toLowerCase()}`}>{countryCostProfile?.source} · {sourceCaption(countryCostProfile?.source)}</span>
             </div>
             <div>
-              <small>한 학기 예산 특징</small>
-              <b>{profile.semesterBudget}</b>
+              <label className="cost-compare-select">
+                <small>비교 국가</small>
+                <select value={comparisonCountry} onChange={(event) => setComparisonCountry(event.target.value)} aria-label="물가지수 비교 국가">
+                  <optgroup label="OECD 월별 자동 갱신">
+                    {costIndexCountries.filter(({ source }) => source === "OECD").map(({ name, label }) => <option key={name} value={name}>{label}</option>)}
+                  </optgroup>
+                  <optgroup label="Numbeo 스냅샷">
+                    {costIndexCountries.filter(({ source }) => source === "Numbeo").map(({ name, label }) => <option key={name} value={name}>{label}</option>)}
+                  </optgroup>
+                </select>
+              </label>
+              <b className="cost-index-value">{comparisonCostIndex?.toFixed(1) ?? "확인 중"}</b>
+              <span className={`cost-source-badge ${comparisonCostProfile?.source.toLowerCase()}`}>{comparisonCostProfile?.source} · {sourceCaption(comparisonCostProfile?.source)}</span>
             </div>
           </div>
+
+          {differentSources && <p className="cost-cross-source-warning">서로 다른 출처의 한국=100 환산값을 비교한 참고치입니다.</p>}
+
+          <p className="cost-index-source">
+            출처별 한국=100 환산 · <a href="https://data-explorer.oecd.org/vis?df%5Bag%5D=OECD.SDD.TPS&df%5Bid%5D=DSD_PPP_M%40DF_PP_CPL_M" target="_blank" rel="noreferrer">OECD 월별 CPL ↗</a> · <a href="https://www.numbeo.com/cost-of-living/rankings_by_country.jsp" target="_blank" rel="noreferrer">Numbeo 2026 ↗</a>
+          </p>
 
           <article>
             <small>주거</small>
@@ -138,6 +205,7 @@ export function CountryDetailPanel({
           {universities.length ? (
             universities.map((university) => (
               <Link key={university.id} href={`/universities/${university.id}`}>
+                <UniversityLogo name={university.university_name} className="country-university-logo" />
                 <span>{university.city}</span>
                 <b>{university.university_name}</b>
                 <small>수업 · 지원 · 주거 정보 보기 →</small>

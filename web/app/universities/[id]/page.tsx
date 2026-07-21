@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getUniversity } from "../../lib/supabase";
 import { Header } from "../../ui/Header";
 import { UniversityCover, UniversityLogo } from "../../ui/LocalMedia";
+import { presentFactRow, presentFieldValue } from "../../lib/display/present-fact";
 
 type RowValue = Record<string, unknown>;
 
@@ -44,7 +45,7 @@ const fieldLabels: Record<string, string> = {
   start_date: "시작일",
   end_date: "종료일",
   housing_available: "기숙사 제공",
-  housing_guaranteed: "보장 여부",
+  housing_guaranteed: "배정 보장",
   housing_type: "주거 유형",
   housing_category: "주거 분류",
   room_type: "방 유형",
@@ -146,6 +147,16 @@ function rowEntries(row: RowValue) {
     .slice(0, 6);
 }
 
+function displayEntries(sectionKey: string, row: RowValue) {
+  const presented = presentFactRow(sectionKey, row)
+    .filter((field) => field.value)
+    .map((field) => [field.label, field.value as string] as const);
+  if (presented.length) return presented;
+  return rowEntries(row)
+    .map(([field, value]) => [formatFieldName(field), presentFieldValue(field, value)] as const)
+    .filter((entry): entry is readonly [string, string] => entry[1] !== null);
+}
+
 function sourceLabel(sourceNote?: string) {
   const note = sourceNote?.trim();
   if (!note) return "공식 자료";
@@ -242,10 +253,10 @@ export default async function UniversityDetail({ params }: { params: Promise<{ i
                   <div className="clean-data-list">
                     {rows.slice(0, 12).map((row, rowIndex) => (
                       <div className="clean-data-row" key={rowIndex}>
-                        {rowEntries(row).map(([field, value]) => (
-                          <p key={field}>
-                            <small>{formatFieldName(field)}</small>
-                            <span>{formatValue(value)}</span>
+                        {displayEntries(key, row).map(([label, value]) => (
+                          <p key={label}>
+                            <small>{label}</small>
+                            <span>{value}</span>
                           </p>
                         ))}
                         {typeof row.source_url === "string" && row.source_url && (

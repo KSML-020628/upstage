@@ -16,6 +16,7 @@ import { fallbackUniversities } from "../lib/fallback-data";
 import { getUniversities } from "../lib/supabase";
 import type { University } from "../lib/types";
 import { CountryDetailPanel } from "./CountryDetailPanel";
+import { BrandMark } from "./LocalMedia";
 
 const WIDTH = 1200;
 const HEIGHT = 650;
@@ -34,11 +35,11 @@ const continentCoordinates: Record<ContinentName, [number, number]> = {
 };
 
 function uniqueCurrencies(universities: University[]): string[] {
-  const priority = ["EUR", "GBP", "HKD", "SGD", "CAD", "TWD", "USD", "DKK", "BRL"];
+  const priority = ["EUR", "GBP", "JPY", "SEK", "HKD", "SGD", "CAD", "TWD", "THB", "TRY", "IDR", "VND", "PEN", "USD", "DKK", "BRL"];
   const present = new Set(
     universities.map((university) => countryProfile(university.country).currency).filter(Boolean),
   );
-  return priority.filter((currency) => present.has(currency)).slice(0, 6);
+  return priority.filter((currency) => present.has(currency)).slice(0, 8);
 }
 
 export function WorldMapExplorer() {
@@ -83,7 +84,8 @@ export function WorldMapExplorer() {
   const groups = useMemo(() => {
     const result = new Map<string, University[]>();
     universities.forEach((university) => {
-      result.set(university.country, [...(result.get(university.country) ?? []), university]);
+      const country = countryDisplayName(university.country);
+      result.set(country, [...(result.get(country) ?? []), university]);
     });
     return result;
   }, [universities]);
@@ -153,7 +155,7 @@ export function WorldMapExplorer() {
     <main className="world-explorer">
       <header className="world-header">
         <Link className="world-brand" href="/">
-          <span>S</span>
+          <BrandMark />
           <b>SKKU Exchange Atlas</b>
         </Link>
         <div>

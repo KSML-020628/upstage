@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { University } from "../lib/types";
+import { presentCost } from "../lib/display/present-fact";
 import { UniversityCardMedia } from "./LocalMedia";
 
 const continentGroups: Record<string, string[]> = {
@@ -117,16 +118,19 @@ function semesterCost(university: University): CostSummary | null {
     if (!currency || !rate) continue;
     const category = costCategory(row);
     if (category === "other") continue;
+    if ((category === "housing" || category === "living") && amount <= 0) continue;
     const period = row.billing_period ?? row.reference_period ?? row.period;
     const semesterAmount = toSemester(amount, period);
     const krw = semesterAmount * rate;
-    const label = `${category}: ${currency} ${Math.round(semesterAmount).toLocaleString()}${period ? ` (${String(period)})` : ""}`;
+    const presented = presentCost(row);
+    const label = `${presented.label}: ${presented.value ?? "확인된 금액 없음"}`;
     const existing = selected.get(category);
     if (!existing || krw < existing.krw) selected.set(category, { krw, label });
   }
   const components = [...selected.values()];
   if (!components.length || (!selected.has("housing") && !selected.has("living"))) return null;
   const krw = components.reduce((sum, item) => sum + item.krw, 0);
+  if (krw <= 0) return null;
   return { krw, display: `약 ${Math.round(krw / 10000).toLocaleString()}만원`, components: components.map((item) => item.label) };
 }
 

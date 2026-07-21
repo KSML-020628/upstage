@@ -41,8 +41,8 @@ export function UniversityLogo({ name, className = "university-logo" }: { name: 
   return <ManagedImage key={source} className={className} src={source} alt={`${name} logo`} />;
 }
 
-export function CountryCover({ name, className = "country-cover" }: { name: string; className?: string }) {
-  const source = countryCoverImage(name);
+export function CountryCover({ name, universityName, className = "country-cover" }: { name: string; universityName?: string; className?: string }) {
+  const source = countryCoverImage(name) ?? (universityName ? universityCoverImage(universityName) : undefined);
 
   if (!source) return null;
 
