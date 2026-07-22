@@ -703,7 +703,11 @@ function isRemovedCostRecommendation(question: string, targetCount: number) {
 }
 
 function detectLanguageRequirement(question: string) {
-  const text = question.normalize("NFKC").toLowerCase();
+  const text = question
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/아이엘츠/g, "ielts")
+    .replace(/토플/g, "toefl");
   const testMatch = text.match(/(ielts|toefl(?:\s*ibt)?|duolingo|pte|cambridge|cae|cpe|ellt|oxford)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i);
   const score = testMatch ? Number(testMatch[2].replace(",", ".")) : undefined;
   const subscoreMatch = text.match(/(?:각\s*(?:영역|항목)|each\s*(?:band|component|section)|no\s*(?:band|component)\s*below)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i);
@@ -2616,6 +2620,61 @@ function clarificationResponse(question: string) {
   });
 }
 
+// A question with no "그중"/"거기" marker but that still reads as its own
+// complete recommendation request (its own region/score/major/housing/
+// deadline condition) is genuinely ambiguous right after a turn that set up
+// different conditions: does it replace them, or layer on top? Silently
+// picking one either drops the earlier conditions the user may still want,
+// or leaks them into a question that never asked for them (the bug this was
+// added to prevent). Asking once is cheaper than guessing wrong either way.
+const SCOPE_RESET_MARKERS = /처음부터|새로\s*(?:검색|찾아|추천)|전체\s*(?:대학)?(?:에서|를 대상으로)|이전\s*조건\s*(?:무시|빼고|없이)|조건\s*(?:다시|리셋)/i;
+
+function describeConditionsForClarification(constraints: QueryConstraints): string {
+  const parts: string[] = [];
+  if (constraints.requireEurope) parts.push("유럽");
+  if (constraints.requireAsia) parts.push("아시아");
+  if (constraints.requireAmericas) parts.push("아메리카");
+  if (constraints.countries.length) parts.push(constraints.countries.join("/"));
+  if (constraints.languageTest && constraints.languageScore !== undefined) parts.push(`${constraints.languageTest} ${constraints.languageScore}`);
+  if (constraints.gpa !== undefined) parts.push(`GPA ${constraints.gpa}`);
+  if (constraints.major) parts.push(constraints.major);
+  if (constraints.requireHousing) parts.push("기숙사 정보 있음");
+  if (constraints.requireHousingGuaranteed) parts.push("기숙사 배정 보장");
+  if (constraints.deadlineSemester) parts.push(constraints.deadlineSemester === "spring" ? "봄학기" : "가을학기");
+  return parts.join(" · ");
+}
+
+function hasGeographicScope(constraints: QueryConstraints) {
+  return Boolean(
+    constraints.requireEurope || constraints.requireAsia || constraints.requireAmericas || constraints.countries.length,
+  );
+}
+
+// Narrowly scoped to the one condition mergeConversationConstraints refuses to
+// carry forward on its own (geographic scope -- see its comment for why).
+// Any client that has ever gotten a successful recommendation will keep
+// sending that turn's contextUniversityIds on every later message, including
+// a fully self-contained next question, so "there is a previous turn" alone
+// is not a useful ambiguity signal (an earlier, broader version of this check
+// asked on every back-to-back recommendation question, including ones that
+// restate their own complete region -- a real false positive found via
+// qa-runner's group B, where each question is independent but happens to
+// share the word "유럽"). Only ask when the *current* question omits any
+// region/country of its own right after a turn that had one -- that specific
+// gap is where "should this stay scoped to before, or search everywhere?" is
+// actually unclear.
+function needsFollowupScopeClarification(
+  question: string,
+  hasContext: boolean,
+  priorConstraints: QueryConstraints | undefined,
+  currentConstraints: QueryConstraints,
+): boolean {
+  if (!hasContext || !priorConstraints) return false;
+  if (SCOPE_RESET_MARKERS.test(question.normalize("NFKC"))) return false;
+  if (!hasGeographicScope(priorConstraints) || hasGeographicScope(currentConstraints)) return false;
+  return hasRecommendationConditions(priorConstraints) && hasRecommendationConditions(currentConstraints);
+}
+
 function needsTargetClarification(
   intent: Intent,
   exactTargetCount: number,
@@ -2843,6 +2902,20 @@ async function handleChatRequest(request: Request) {
     }
     const unknownInstitution = explicitUnknownInstitution(question, exactTargets);
     if (unknownInstitution) return unknownInstitutionResponse(unknownInstitution, universities.length);
+    if (!explicitFollowup && !exactTargets.length) {
+      const priorUserTurns = messages.slice(0, -1).filter((message) => message.role === "user");
+      const priorConstraints = priorUserTurns.length
+        ? detectConversationConstraints(messages.slice(0, -1))
+        : undefined;
+      if (needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, detectedConstraints)) {
+        console.info("[chat-v2] clarification", { requestId, source: "followup_scope_ambiguous" });
+        const priorSummary = describeConditionsForClarification(priorConstraints!);
+        return clarificationResponse(
+          `방금 말씀하신 조건${priorSummary ? `("${priorSummary}")` : ""}을 유지한 채 좁혀서 찾을까요, 아니면 새 조건으로 전체 대학에서 다시 찾을까요?\n` +
+            `예: "그중 ...만 알려줘" (조건 유지) 또는 "처음부터 ... 대학 알려줘" (새로 검색)`,
+        );
+      }
+    }
     const explicitContextTargets = contextUniversityIds
       .map((id) => universities.find((university) => university.id === id))
       .filter((university): university is University => Boolean(university));
