@@ -401,12 +401,6 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     return () => window.removeEventListener("keydown", closeWithEscape);
   }, [isPanel]);
 
-  useEffect(() => {
-    if (!loading) {
-      setLoadingStage(0);
-    }
-  }, [loading]);
-
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   function resetChat() {

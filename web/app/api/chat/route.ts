@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUniversities } from "../../lib/supabase";
-import type { ExchangeProgram, ProfileSection, University } from "../../lib/types";
+import type { ExchangeProgram, University } from "../../lib/types";
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
 import { runSolarPlanner, type PlannerRun, type QueryPlan } from "../../lib/chat/query-plan";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
@@ -14,7 +14,6 @@ import {
 } from "../../lib/chat/chat-policy";
 import {
   NUMBEO_SNAPSHOT_DATE,
-  OECD_FALLBACK_PERIOD,
   costIndexCountry,
   costIndexCountryLabel,
   costOfLivingIndex,
@@ -31,7 +30,6 @@ import {
 
 export const runtime = "nodejs";
 
-const UPSTAGE_CHAT_URL = "https://api.upstage.ai/v1/chat/completions";
 const MAX_MESSAGES = 8;
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -221,15 +219,23 @@ const AMERICAS_COUNTRIES = new Set([
   "united states", "usa", "united states of america",
 ]);
 
+// No registered exchange partner is ever "South Korea" (this lists SKKU's
+// outbound partners, not domestic universities), so matching "한국"/"Korea"
+// here as an include/exclude country filter can only ever zero out results --
+// e.g. "한국 학생이 지원하기 좋은 유럽 대학" would set countries: ["South Korea"]
+// and, combined with requireEurope, guarantee 0 matches. "한국" in a question
+// almost always means "compared to Korea" (the cost-of-living baseline) or
+// "as a Korean student", never "a university located in Korea". Left out of
+// this list entirely rather than filtered post hoc, so it can't leak into
+// constraints.countries anywhere it's used.
 const COUNTRY_ALIASES: Array<{ country: string; patterns: RegExp[] }> = [
-  { country: "South Korea", patterns: [/대한민국|한국/, /south korea|republic of korea|korea/] },
   { country: "France", patterns: [/프랑스/, /france|french/] },
   { country: "Germany", patterns: [/독일/, /germany|german/] },
   { country: "Austria", patterns: [/오스트리아/, /austria/] },
   { country: "Finland", patterns: [/핀란드/, /finland|finnish/] },
   { country: "Belgium", patterns: [/벨기에/, /belgium|belgian/] },
   { country: "Italy", patterns: [/이탈리아/, /italy|italian/] },
-  { country: "United Kingdom", patterns: [/영국/, /united kingdom|uk|britain|england/] },
+  { country: "United Kingdom", patterns: [/영국/, /united kingdom|\buk\b|britain|england/] },
   { country: "Denmark", patterns: [/덴마크/, /denmark|danish/] },
   { country: "Canada", patterns: [/캐나다/, /canada|canadian/] },
   { country: "Singapore", patterns: [/싱가포르/, /singapore/] },
@@ -252,6 +258,14 @@ const COUNTRY_ALIASES: Array<{ country: string; patterns: RegExp[] }> = [
   { country: "Peru", patterns: [/페루/, /peru|peruvian/] },
 ];
 
+// Seed values only -- refreshCurrencyRatesInBackground() below keeps these
+// updated from the same live source app/api/exchange-rate/route.ts uses, so
+// a chatbot cost comparison and the country detail page's displayed rate for
+// the same currency don't quietly disagree. Cost comparison across
+// universities is a synchronous scoring/sorting step used deep in
+// passesStructuredFilters/selectCards/evaluateUniversity; threading a fetched
+// rate through every one of those call sites for every request is a much
+// larger, riskier change than keeping this map itself fresh in place.
 const CURRENCY_TO_KRW: Record<string, number> = {
   EUR: 1600,
   GBP: 1900,
@@ -268,9 +282,26 @@ const CURRENCY_TO_KRW: Record<string, number> = {
   JPY: 9.4,
 };
 
-function compactText(value: unknown, maxLength = 500): unknown {
-  if (typeof value !== "string") return value;
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+let currencyRatesRefreshedAt = 0;
+const CURRENCY_RATE_REFRESH_MS = 60 * 60 * 1000;
+
+// Fire-and-forget: called at the start of a request so it never adds latency
+// to that request, but keeps CURRENCY_TO_KRW reasonably live for later ones.
+// Falls back to whatever value is already in the map (the static seed, or the
+// last successful live fetch) on any failure -- never removes a currency.
+function refreshCurrencyRatesInBackground() {
+  if (Date.now() - currencyRatesRefreshedAt < CURRENCY_RATE_REFRESH_MS) return;
+  currencyRatesRefreshedAt = Date.now();
+  for (const currency of Object.keys(CURRENCY_TO_KRW)) {
+    void fetch(`https://api.frankfurter.dev/v2/rate/${currency}/KRW`, { next: { revalidate: 3600 } })
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((data: { rate?: number } | undefined) => {
+        if (data && typeof data.rate === "number" && Number.isFinite(data.rate) && data.rate > 0) {
+          CURRENCY_TO_KRW[currency] = data.rate;
+        }
+      })
+      .catch(() => {});
+  }
 }
 
 function cleanText(value: unknown, fallback = ""): string {
@@ -302,56 +333,6 @@ function normalizeSearchText(value: unknown): string {
 
 function includesAny(text: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(text));
-}
-
-function compactRows(rows: Record<string, unknown>[] | undefined, limit = 6) {
-  return (rows ?? []).slice(0, limit).map((row) =>
-    Object.fromEntries(
-      Object.entries(row)
-        .filter(([key, value]) => !["id", "created_at", "updated_at", "exchange_program_id", "university_id"].includes(key) && value != null)
-        .map(([key, value]) => [key, compactText(value)]),
-    ),
-  );
-}
-
-function compactSections(sections: ProfileSection[] | undefined, limit = 8) {
-  return (sections ?? []).slice(0, limit).map((section) => ({
-    number: section.section_number,
-    title: section.section_title,
-    summary: compactText(section.summary, 500),
-    source: section.evidence_url,
-  }));
-}
-
-function compactProgram(program: ExchangeProgram) {
-  return {
-    academic_year: program.academic_year,
-    program_name: program.program_name,
-    exchange_type: program.exchange_type,
-    application_process: compactText(program.application_process, 700),
-    course_registration_notes: compactText(program.course_registration_notes, 700),
-    application_deadlines: compactRows(program.application_deadlines),
-    language_requirements: compactRows(program.language_requirements, 8),
-    academic_periods: compactRows(program.academic_periods),
-    housing_options: compactRows(program.housing_options),
-    estimated_costs: compactRows(program.estimated_costs),
-    required_documents: compactRows(program.required_documents),
-    source_links: compactRows(program.source_links, 8),
-  };
-}
-
-function compactUniversity(university: University) {
-  return {
-    university_name: university.university_name,
-    country: university.country,
-    city: university.city,
-    summary: compactText(university.summary, 700),
-    official_website_url: university.official_website_url,
-    incoming_exchange_url: university.incoming_exchange_url,
-    exchange_programs: (university.exchange_programs ?? []).slice(0, 2).map(compactProgram),
-    profile_sections: compactSections(university.profile_sections),
-    unknowns: university.unknowns?.slice(0, 8),
-  };
 }
 
 function supabaseServerRestBase() {
@@ -660,7 +641,6 @@ function rowsText(rows: Record<string, unknown>[] | undefined) {
 function detectIntent(question: string): Intent {
   const rawText = question.normalize("NFKC").toLowerCase();
   if (/수강\s*제한|전공\s*제한|선수\s*과목|제한됨|restricted|restriction|prerequisite|approval required|not available/i.test(rawText)) return "restriction";
-  if (/학점|평점|\bgpa\b|grade point/i.test(rawText)) return "general";
   if (/비용|생활비|예산|학비|등록금|기숙사비|주거비|저렴|가장\s*싼|cost|fee|budget|tuition|living\s*cost|cheap|cheapest|least expensive/i.test(rawText)) return "cost";
   if (/기숙사|숙소|주거|housing|accommodation|dorm|residence/i.test(rawText)) return "housing";
   if (/ielts|toefl|어학|영어|언어|language|english/i.test(rawText)) return "language";
@@ -694,11 +674,14 @@ function isCostOfLivingIndexQuestion(question: string) {
     || /물가\s*지수|numbeo|cost of living index|한국.*물가|물가.*비슷|생활\s*수준.*비슷/.test(raw);
 }
 
-function isRemovedCostRecommendation(question: string, targetCount: number) {
+// This runs before any university-name resolution, so it never had a real
+// target count to check -- the caller always passed 0, permanently disabling
+// the "targetCount === 1" exemption this was written for. Dropped the
+// parameter rather than leave a branch that can't fire.
+function isRemovedCostRecommendation(question: string) {
   const text = question.normalize("NFKC").toLowerCase();
   if (/예산|상한|budget/.test(text)) return true;
   if (/총\s*비용|전체\s*비용|종합\s*비용|total\s*cost/.test(text)) return true;
-  if (targetCount === 1) return false;
   return /비용[^\n]{0,30}(?:비교|순위|랭킹|가장|최저|저렴|싼|낮은\s*순|적게|추천)|(?:compare|rank|ranking|cheapest|lowest|recommend)[^\n]{0,30}(?:cost|fee)/i.test(text);
 }
 
@@ -724,11 +707,16 @@ function detectLanguageRequirement(question: string) {
 function detectBudgetKrwSemester(question: string) {
   const text = normalizeSearchText(question);
   const raw = text.match(/(\d+(?:\.\d+)?)\s*(만원|만 원|krw|원)/i);
-  if (!raw) return undefined;
+  if (!raw || raw.index === undefined) return undefined;
   const number = Number(raw[1]);
   if (!Number.isFinite(number)) return undefined;
   const krw = /만원|만 원/.test(raw[2]) ? number * 10_000 : number;
-  const isMonthly = /월|한달|1달|monthly|per month/.test(text);
+  // Only look for "monthly" near the amount itself -- checking the whole
+  // question turned "5월 마감이고 예산은 300만원이야" into a monthly budget (the
+  // "월" in "5월", a date, had nothing to do with the money) and multiplied a
+  // 3,000,000 KRW budget by 5.
+  const vicinity = text.slice(Math.max(0, raw.index - 12), raw.index + raw[0].length + 12);
+  const isMonthly = /월|한달|1달|monthly|per month/.test(vicinity);
   return isMonthly ? krw * 5 : krw;
 }
 
@@ -803,8 +791,12 @@ function detectConstraints(question: string): QueryConstraints {
   const rawQuestion = question.toLowerCase();
   const intent = detectIntent(question);
   const costOfLivingIndexQuestion = isCostOfLivingIndexQuestion(question);
+  // "명" is a counter for people, not institutions -- keeping it here matched
+  // "파견 정원 10명 이상인 대학 추천해줘" as "10 requested results" (topN capped at
+  // 8) instead of a quota threshold, which detectQuotaMin already parses
+  // separately from the same "10명 이상" text.
   const topMatch = question.match(
-    /(\d+)\s*(개|곳|명|schools?|universities?)|(\d+)\s*(cheapest|lowest|best|recommended|추천)|(?:recommend|show|pick|select|top)\s*(?:the\s*)?(\d+)/i,
+    /(\d+)\s*(개|곳|schools?|universities?)|(\d+)\s*(cheapest|lowest|best|recommended|추천)|(?:recommend|show|pick|select|top)\s*(?:the\s*)?(\d+)/i,
   );
   const koreanTop = question.match(/(\d+)\s*(?:개|곳|군데|학교|대학)/)?.[1];
   const topValue = topMatch?.[1] ?? topMatch?.[3] ?? topMatch?.[5] ?? koreanTop;
@@ -847,7 +839,14 @@ function detectConstraints(question: string): QueryConstraints {
     requireQuotaKnown: /quota.*(?:확인|공식)|(?:확인|공식).*quota/i.test(rawQuestion),
     requireHousingMissing: /기숙사\s*(?:정보가\s*)?(?:없는|없고|미확인)|housing[^\n]{0,20}(?:missing|unknown|without)/i.test(rawQuestion),
     sortDeadlineEarliest: /빠른|가장\s*먼저|이른|earliest|soonest/.test(text) || /빠른|가장\s*먼저|이른|earliest|soonest/.test(rawQuestion),
-    deadlineAcademicYear: Number(rawQuestion.match(/\b(20\d{2})(?:\s*\/\s*\d{2,4})?/)?.[1]) || undefined,
+    // When an explicit ISO-date comparator was already parsed (e.g.
+    // "2026-05-01 이후"), don't also pull an academic year out of that same
+    // date and use it as a second, stricter filter -- "이후" should include
+    // 2027, 2028, ... deadlines too, and requiring the year to equal exactly
+    // the one in the comparator date silently excludes those.
+    deadlineAcademicYear: deadlineDateConstraint
+      ? undefined
+      : Number(rawQuestion.match(/\b(20\d{2})(?:\s*\/\s*\d{2,4})?/)?.[1]) || undefined,
     deadlineSemester: /가을|autumn|fall/.test(rawQuestion) ? "autumn" as const : /봄|spring/.test(rawQuestion) ? "spring" as const : undefined,
     deadlineType: /nomination|노미네이션|지명/.test(rawQuestion) && !/application|지원\s*마감/.test(rawQuestion)
       ? "nomination" as const
@@ -952,7 +951,7 @@ function isEuropeanUniversity(university: University) {
   const name = normalizeSearchText(university.university_name);
   return (
     EUROPE_COUNTRIES.has(country) ||
-    /united kingdom|uk|england|scotland/.test(country) ||
+    /united kingdom|\buk\b|england|scotland/.test(country) ||
     /paris|rennes|lyon|bristol|sheffield|venice|rostock|kiel|dornbirn|brussels|copenhagen|helsinki|joensuu|kuopio|toulouse|osnabruck/.test(`${city} ${name}`)
   );
 }
@@ -1450,12 +1449,6 @@ function deadlineRowTime(row: Record<string, unknown>) {
   return undefined;
 }
 
-function earliestDeadlineTime(university: University) {
-  const deadlines = programOf(university)?.application_deadlines ?? [];
-  const times = deadlines.map(deadlineRowTime).filter((value): value is number => value !== undefined && Number.isFinite(value));
-  return times.length ? Math.min(...times) : Number.MAX_SAFE_INTEGER;
-}
-
 function deadlineSemesterOf(row: Record<string, unknown>): DeadlineSemester | undefined {
   const text = normalizeSearchText(`${cleanText(row.semester)} ${cleanText(row.deadline_text)}`);
   if (/autumn|fall|가을/.test(text)) return "autumn";
@@ -1514,7 +1507,17 @@ function passesStructuredFilters(university: University, constraints: QueryConst
   if (!matchesCountry(university, constraints.countries)) return false;
   if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) return false;
   if (constraints.excludeAsia && isAsianUniversity(university)) return false;
-  if (constraints.requireHousing && !(programOf(university)?.housing_options?.length)) return false;
+  if (constraints.requireHousing) {
+    const housingRows = programOf(university)?.housing_options ?? [];
+    // Must match evaluateUniversity's three-state read of the same rows: no
+    // rows at all is unconfirmed, and a row explicitly saying
+    // housing_available: false is a confirmed "no" -- neither should pass a
+    // "has housing" filter. Previously this only checked "does any row
+    // exist", so a university whose only housing row said unavailable still
+    // passed here while evaluateUniversity correctly marked it "failed",
+    // making the two selection paths disagree about the same university.
+    if (!housingRows.length || housingRows.every((row) => row.housing_available === false)) return false;
+  }
   if (constraints.requireHousingGuaranteed) {
     const rows = programOf(university)?.housing_options ?? [];
     if (!rows.some((row) => row.housing_guaranteed === true || row.is_guaranteed === true)) return false;
@@ -1849,19 +1852,6 @@ function factBundleForCard(university: University, intent: Intent, cost?: CostEs
     .slice(0, 5)
     .map((row) => factEvidenceFromRow(university, row, intent, sourceFieldForIntent(intent)))
     .filter((item) => item.fact_id || item.source_url || item.evidence_quote);
-}
-
-function compactFactContext(cards: ResultCard[]) {
-  return cards.map((card, index) => ({
-    rank: index + 1,
-    university_id: card.university_id,
-    university_name: card.university_name,
-    country: card.country,
-    city: card.city,
-    summary: card.summary,
-    highlights: card.highlights,
-    selected_facts: card.fact_bundle ?? [],
-  }));
 }
 
 function requestedFactBundle(
@@ -2236,25 +2226,6 @@ function searchMode(intent: Intent) {
   return "Supabase 구조화 필드 1차 후보 추림 + Solar Pro 3 설명";
 }
 
-function deterministicCostAnswer(cards: ResultCard[]) {
-  const cleanCell = (value: string) => value.replace(/https?:\/\/\S+/g, "").replace(/\s+·\s+·/g, " · ").trim();
-  const rows = cards.map((card, index) => {
-    const cost = card.highlights.find((item) => item.includes("학기 기준 비교 비용")) ?? "비용 확인 필요";
-    const housing = card.highlights.find((item) => item.includes("기숙사 보장")) ?? "기숙사 보장: 확인 필요";
-    const caution = /Living expenses|생활비/i.test(card.highlights.join(" ")) ? "기숙사/생활비 일부 포함" : "부분 비용 기준";
-    return `| ${index + 1} | ${card.university_name} | ${card.country} · ${card.city} | ${cleanCell(cost.replace(/^학기 기준 비교 비용:\s*/, ""))} | ${housing.replace(/^기숙사 보장:\s*/, "")} | ${caution} |`;
-  });
-  return [
-    "### 비용 비교",
-    "",
-    "| 순위 | 대학 | 위치 | 학기 기준 비교 비용 | 기숙사 보장 여부 | 주의사항 |",
-    "|---|---|---|---|---|---|",
-    ...rows,
-    "",
-    "비용은 서로 다른 통화와 기간을 서버에서 학기 기준 KRW로 환산한 값입니다. 생활비가 없는 대학은 기숙사비 등 일부 비용만 기준으로 정렬될 수 있으므로, 실제 지원 전 공식 비용 페이지와 출처 카드를 반드시 확인해 주세요.",
-  ].join("\n");
-}
-
 function deterministicDirectCostAnswer(cards: ResultCard[]) {
   const cell = (value: string) => cleanText(value).replace(/\|/g, "/").replace(/\s+/g, " ").trim();
   const rows = cards.flatMap((card) => {
@@ -2469,7 +2440,12 @@ async function v2Response(args: {
     ? await runSolarReasoner({ apiKey, model, packet })
     : { output: null, usedSolar: false, issues: ["missing_api_key"] };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
-  const modelShortAnswer = reasoner.output?.shortAnswer || presentation.shortAnswer;
+  // Only the reasoner's own text needs this pass -- presentation.shortAnswer
+  // is always a deterministic template and never contains a placeholder like
+  // "XXX"/"TBD" to begin with.
+  const modelShortAnswer = reasoner.output?.shortAnswer
+    ? sanitizeGeneratedAnswer(reasoner.output.shortAnswer) || presentation.shortAnswer
+    : presentation.shortAnswer;
   const shortAnswer = args.shortAnswerOverride ?? authoritativeShortAnswer(args.cards, modelShortAnswer);
 
   console.info("[chat-v2] pipeline", {
@@ -2562,37 +2538,6 @@ function deterministicGeneralAnswer(cards: ResultCard[]) {
   }
   lines.push("### 확인 안내", "", "- 상세 조건과 최신 일정은 연결된 공식 출처에서 다시 확인해 주세요.");
   return lines.join("\n");
-}
-
-function systemPrompt(context: string, cards: ResultCard[], intent: Intent) {
-  return `당신은 성균관대학교 학생을 위한 교환대학 정보 도우미입니다.
-
-답변 원칙:
-- 서버가 Supabase 구조화 데이터로 먼저 필터링/정렬한 후보 카드만 근거로 한국어로 답하세요.
-- 후보 카드 밖의 대학을 새로 추천하거나 순위에 넣지 마세요.
-- 순위와 표는 반드시 후보 카드 배열 순서를 그대로 따르세요.
-- 데이터에 없는 내용은 추측하지 말고 "현재 등록된 자료로는 확인이 필요합니다"라고 말하세요.
-- DB에 값이 없으면 0을 쓰지 말고 "확인 필요"라고 표시하세요.
-- 지원 마감일, GPA, 어학 요건, 기숙사, 비용, 수강 제한은 구분해서 설명하세요.
-- 여러 대학을 추천할 때는 이유를 짧게 비교하세요.
-- 답변은 반드시 "### 핵심 답변"으로 시작하고, 긴 서론과 인사말은 생략하세요.
-- 한 대학의 정보 조회는 "| 항목 | 확인된 내용 |" 2열 표로 정리하세요.
-- 여러 대학의 비교·추천은 대학별 핵심 조건을 GFM Markdown 표로 정리하세요.
-- 표 아래에는 필요한 경우에만 "### 주의사항" 불릿 목록을 최대 3개 작성하세요.
-- UUID, fact_id, confidence, review_status, 내부 테이블명, JSON 원문을 답변에 노출하지 마세요.
-- evidence_quote를 통째로 복사하지 말고 질문에 필요한 한 문장만 한국어로 요약하세요.
-- DB에 없는 금액을 XXX, TBD, N/A 같은 자리표시자로 만들지 말고 해당 금액 항목을 생략하세요.
-- 표는 코드 블록 안에 넣지 말고, 최대 5개 열만 사용하세요.
-- 출처 URL은 서버가 별도 카드로 제공하므로 답변 본문에서 없는 링크를 만들지 마세요.
-- API 키, 내부 환경변수, 서버 설정은 절대 공개하지 마세요.
-
-질문 유형: ${intent}
-
-서버가 구조화 데이터로 먼저 추린 후보 카드:
-${JSON.stringify(cards)}
-
-등록된 대학 데이터:
-${context}`;
 }
 
 function outOfScopeResponse() {
@@ -2780,6 +2725,7 @@ async function handleChatRequest(request: Request) {
   if (isRateLimited(request)) {
     return NextResponse.json({ error: "질문이 너무 빠르게 반복되고 있습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 429 });
   }
+  refreshCurrencyRatesInBackground();
 
   let body: unknown;
   try {
@@ -2814,7 +2760,7 @@ async function handleChatRequest(request: Request) {
     if (isCostOfLivingIndexQuestion(question)) return costOfLivingResponse(question);
     // Product policy must win even when the active planner classifies the
     // question as out of scope or changes its intent.
-    if (isRemovedCostRecommendation(question, 0)) {
+    if (isRemovedCostRecommendation(question)) {
       return removedCostFeatureResponse();
     }
     const explicitFollowup = contextUniversityIds.length > 0 && isFollowupReference(question);
@@ -2968,6 +2914,15 @@ async function handleChatRequest(request: Request) {
             deterministicRequestedFieldsAnswer(cards, constraints.requestedFields),
           ].join("\n\n")
         : deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
+      // deterministicClassifiedAnswer always names every matched/partial card,
+      // so this should never find anything -- it exists to catch a future
+      // change to that template silently dropping a card's name, which would
+      // otherwise ship unnoticed (chat-policy.ts warns against unused
+      // safeguards; this is the same check kept from becoming one).
+      const missingFromAnswer = findCardsMissingFromAnswer(cards, detailedAnswer);
+      if (missingFromAnswer.length) {
+        console.warn("[chat-v2] card missing from classified answer text", missingFromAnswer.map((card) => card.university_id));
+      }
       return v2Response({
         question,
         cards,

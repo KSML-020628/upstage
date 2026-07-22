@@ -12,7 +12,7 @@
     "dev:sites": "vinext dev",
     "build:sites": "vinext build",
     "start:sites": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run test:presenter && npm run test:chat",
     "test:presenter": "node --experimental-strip-types --test tests/present-fact.golden.test.ts",
     "test:chat": "node --experimental-strip-types --test tests/chat-policy.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

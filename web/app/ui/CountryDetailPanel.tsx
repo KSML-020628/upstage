@@ -36,6 +36,17 @@ export function CountryDetailPanel({
   const [comparisonCountry, setComparisonCountry] = useState("South Korea");
   const [oecdData, setOecdData] = useState<OecdCostData | null>(null);
   const [oecdError, setOecdError] = useState(false);
+  // Reset the panel's own state when it starts showing a different country,
+  // following React's documented pattern for this (https://react.dev/learn/you-might-not-need-an-effect)
+  // -- adjusting state during render instead of in an effect avoids an extra
+  // render pass and the "setState synchronously within an effect" warning.
+  const [resetForCountry, setResetForCountry] = useState(country);
+  if (country !== resetForCountry) {
+    setResetForCountry(country);
+    setTab("life");
+    setRate(null);
+    setRateError(false);
+  }
   const profile = countryProfile(country);
   const displayName = countryDisplayName(country);
   const countryCostProfile = costIndexCountry(displayName);
@@ -68,9 +79,6 @@ export function CountryDetailPanel({
   }, []);
 
   useEffect(() => {
-    setTab("life");
-    setRate(null);
-    setRateError(false);
     fetch(`/api/exchange-rate?currency=${profile.currency}`)
       .then((response) => {
         if (!response.ok) throw new Error("rate");
