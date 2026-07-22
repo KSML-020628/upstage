@@ -269,3 +269,168 @@ export function presentFactRow(sectionKey: string, row: FactRow): PresentedField
   if (sectionKey === "quota_facts") return [presentQuota(row)];
   return [];
 }
+
+// ── "확인하기 어려운 정보" (unverified_items) 표시 필터 ──────────────────────
+//
+// unverified_items 는 공식 출처로 확정하지 못한 항목을 솔직하게 알리는 정직성
+// 장치다. 원본 데이터는 절대 고치지 않는다 — 이 함수는 표시 직전에만 걸러낸다.
+//
+// 진짜 미확인 항목은 예외 없이 "서술어 없는 명사구"다: "교환학생 선발 인원(quota)",
+// "정확한 GPA 기준", "비자 발급 소요 기간"처럼 무엇을 확인하지 못했는지만 가리킨다.
+// 그래서 필터는 배제 목록이 아니라 허용 형태(명사구) 기준으로 짠다 — 완결된 문장,
+// 단정 서술, 섹션 요약문, 그리고 추출 모델이 항목명을 자기복제한 재귀 증식 노이즈는
+// 전부 "명사구가 아니거나, 명사구인데 서로 늘어나며 중복된 것"이라는 공통점으로 걸러진다.
+
+export type UnverifiedItemsResult = {
+  /** 필터를 통과해 바로 보여줄 항목 (최대 8개). */
+  shown: string[];
+  /** 필터는 통과했지만 8개를 넘어 접어서 "더 보기"로 처리할 항목. */
+  overflow: string[];
+  /** 걸러진(제외된) 항목 — 과도 삭제 여부를 검증하기 위해 항상 함께 반환한다. */
+  filtered: string[];
+};
+
+const UNVERIFIED_ITEM_MAX_SHOWN = 8;
+
+// 바로 뒤에 관형사형 어미(-한/-하는/-된/-되는)가 붙어야 서술로 본다. "제공 여부",
+// "가능 과목", "운영 기간"처럼 활용 없이 명사를 바로 수식하는 복합명사는 서술이 아니다.
+const ASSERTIVE_PREDICATE_PATTERN = /(제공|운영|권장|위치|가능)(?:한|하는|된|되는)/;
+const ASSERTIVE_PREDICATE_ENDINGS = ["입니다", "합니다"];
+
+// ETL이 "필드명: 공식 근거 기반 구조화 값 추가 확인 필요"처럼 검증 상태를 그대로
+// unverified_items 에 템플릿으로 남기는 경우가 있다. 완결형 어미로 끝나 종결 문장
+// 판정에 걸리지만, 이건 재귀 증식도 오분류된 확정 사실도 아닌 정직한 미확인 표시이므로
+// 이 정확한 패턴만 예외로 통과시킨다.
+const FIELD_STATUS_TEMPLATE_SUFFIX = "공식 근거 기반 구조화 값 추가 확인 필요";
+
+function isFieldStatusTemplate(item: string): boolean {
+  const colonIndex = item.indexOf(":");
+  if (colonIndex < 0) return false;
+  return item.slice(colonIndex + 1).trim() === FIELD_STATUS_TEMPLATE_SUFFIX;
+}
+
+// 괄호 병기(quota 처럼)는 명사구의 일부일 뿐이므로 종결 어미 판정에서는 떼어내고 본다.
+function stripTrailingParenthetical(text: string): string {
+  return text.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+function endsLikeCompleteSentence(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (/[.!?]$/.test(trimmed)) return true;
+  const core = stripTrailingParenthetical(trimmed);
+  if (!core) return false;
+  return /(다|요|음|함)$/.test(core);
+}
+
+function isNounPhraseShaped(item: string): boolean {
+  if (isFieldStatusTemplate(item)) return true;
+  if (endsLikeCompleteSentence(item)) return false;
+  if (ASSERTIVE_PREDICATE_ENDINGS.some((marker) => item.includes(marker))) return false;
+  if (ASSERTIVE_PREDICATE_PATTERN.test(item)) return false;
+  const colonIndex = item.indexOf(":");
+  if (colonIndex >= 0) {
+    const afterColon = item.slice(colonIndex + 1).trim();
+    if (afterColon && endsLikeCompleteSentence(afterColon)) return false;
+  }
+  return true;
+}
+
+function tokenize(item: string): string[] {
+  return item.trim().split(/\s+/).filter(Boolean);
+}
+
+// 한 항목 안에서 같은 어절이 두 번 이상 반복되면(추출 모델의 자기복제 흔적) 제외한다.
+// 단, "및"으로 이어진 서로 다른 절에서 같은 단어를 한 번씩 재사용하는 것은
+// (예: "학점 인정 절차 및 학점 상한") 정상적인 명사구이므로, 반복 검사는 "및"으로
+// 나눈 각 절 내부에서만 본다.
+function hasRepeatedToken(item: string): boolean {
+  const clauses = item.split(/\s*및\s*/);
+  return clauses.some((clause) => {
+    const tokens = tokenize(clause);
+    const seen = new Set<string>();
+    for (const token of tokens) {
+      if (seen.has(token)) return true;
+      seen.add(token);
+    }
+    return false;
+  });
+}
+
+function isStrictTokenPrefix(shortTokens: string[], longTokens: string[]): boolean {
+  if (shortTokens.length >= longTokens.length) return false;
+  return shortTokens.every((token, index) => token === longTokens[index]);
+}
+
+// 어떤 항목이 다른 항목을 접두사로 완전히 포함하면서 길이만 늘어난 관계가
+// 3개 이상 사슬로 이어지면, 그 사슬에서 가장 짧은(원본) 항목 하나만 남긴다.
+function dropProliferationChains(items: string[]): { kept: string[]; dropped: string[] } {
+  const tokensByItem = new Map(items.map((item) => [item, tokenize(item)] as const));
+  const parent = new Map<string, string>();
+
+  for (const item of items) {
+    const itemTokens = tokensByItem.get(item)!;
+    let bestParent: string | undefined;
+    let bestLength = -1;
+    for (const other of items) {
+      if (other === item) continue;
+      const otherTokens = tokensByItem.get(other)!;
+      if (isStrictTokenPrefix(otherTokens, itemTokens) && otherTokens.length > bestLength) {
+        bestParent = other;
+        bestLength = otherTokens.length;
+      }
+    }
+    if (bestParent !== undefined) parent.set(item, bestParent);
+  }
+
+  function chainRoot(item: string): string {
+    let current = item;
+    const visited = new Set<string>();
+    while (parent.has(current) && !visited.has(current)) {
+      visited.add(current);
+      current = parent.get(current)!;
+    }
+    return current;
+  }
+
+  const groupsByRoot = new Map<string, string[]>();
+  for (const item of items) {
+    const root = chainRoot(item);
+    const group = groupsByRoot.get(root) ?? [];
+    group.push(item);
+    groupsByRoot.set(root, group);
+  }
+
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (const item of items) {
+    const root = chainRoot(item);
+    const group = groupsByRoot.get(root)!;
+    if (group.length >= 3) {
+      if (item === root) kept.push(item);
+      else dropped.push(item);
+    } else {
+      kept.push(item);
+    }
+  }
+  return { kept, dropped };
+}
+
+export function presentUnknowns(items: string[]): UnverifiedItemsResult {
+  const deduped = [...new Set(items.map((item) => item.trim()).filter(Boolean))];
+
+  const shapeFiltered: string[] = [];
+  const shapeDropped: string[] = [];
+  for (const item of deduped) {
+    if (isNounPhraseShaped(item) && !hasRepeatedToken(item)) shapeFiltered.push(item);
+    else shapeDropped.push(item);
+  }
+
+  const { kept, dropped: chainDropped } = dropProliferationChains(shapeFiltered);
+
+  return {
+    shown: kept.slice(0, UNVERIFIED_ITEM_MAX_SHOWN),
+    overflow: kept.slice(UNVERIFIED_ITEM_MAX_SHOWN),
+    filtered: [...shapeDropped, ...chainDropped],
+  };
+}

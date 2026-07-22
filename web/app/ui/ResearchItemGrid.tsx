@@ -1,6 +1,8 @@
 import type { ProfileSection, SourceLink } from "../lib/types";
+import { presentUnknowns } from "../lib/display/present-fact";
 
 const MISSING_TEXT = "찾을 수 없는 내용";
+const NO_UNVERIFIED_TEXT = "등록된 미확인 항목이 없습니다.";
 
 type ResearchDefinition = {
   number: string;
@@ -14,10 +16,13 @@ type ResearchItemGridProps = {
   fallbackSections?: ProfileSection[];
   unknowns?: string[];
   sourceLinks?: SourceLink[];
+  /** 22번 항목 필터링 결과를 개발 콘솔에 남길 때 대학을 식별하기 위한 라벨(선택). */
+  universityName?: string;
 };
 
 type PreparedResearchItem = ResearchDefinition & {
   bullets: string[];
+  overflowBullets: string[];
   summary?: string;
   groups: Array<{ title: string; items: string[] }>;
   structuredItems: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
@@ -129,7 +134,13 @@ function sourceNoteFor(sections: ProfileSection[], links: SourceLink[]): string 
   return "출처 확인 필요";
 }
 
-export function prepareResearchItems({ sections = [], fallbackSections = [], unknowns = [], sourceLinks = [] }: ResearchItemGridProps): PreparedResearchItem[] {
+export function prepareResearchItems({
+  sections = [],
+  fallbackSections = [],
+  unknowns = [],
+  sourceLinks = [],
+  universityName,
+}: ResearchItemGridProps): PreparedResearchItem[] {
   const claimed = new Set<ProfileSection>();
   const prepared = RESEARCH_ITEMS.map((definition) => {
     let matches = sections.filter((section) => !claimed.has(section) && matchesDefinition(section, definition));
@@ -140,25 +151,45 @@ export function prepareResearchItems({ sections = [], fallbackSections = [], unk
     }
     let bullets = matches.flatMap((section) => summaryToBullets(section.summary));
     let links = sectionLinks(matches);
+    let overflowBullets: string[] = [];
+    let unverifiedIsEmpty = false;
 
     if (definition.number === "21" && sourceLinks.length) {
       bullets = sourceLinks.map((link) => link.title?.trim() || "공식 자료");
       links = [...links, ...sourceLinks];
     }
-    if (definition.number === "22" && unknowns.length) bullets = unknowns.map((item) => item.trim()).filter(Boolean);
+    if (definition.number === "22") {
+      // unverified_items 는 공식 출처로 확정하지 못한 항목을 알리는 정직성 장치이지만,
+      // 추출 단계에서 재귀 증식 노이즈·오분류된 확정 사실·섹션 요약문이 섞여 들어온다.
+      // 원본 unknowns 값은 그대로 두고 표시 직전에만 presentUnknowns 로 거른다.
+      const result = presentUnknowns(unknowns);
+      bullets = result.shown;
+      overflowBullets = result.overflow;
+      unverifiedIsEmpty = result.shown.length === 0 && result.overflow.length === 0;
+      if (process.env.NODE_ENV !== "production" && unknowns.length) {
+        const before = unknowns.length;
+        const after = result.shown.length + result.overflow.length;
+        const excludedPreview = result.filtered.slice(0, 5);
+        console.info(
+          `[research-item-22] ${universityName ?? "(대학명 미상)"}: 필터 전 ${before}건 -> 후 ${after}건` +
+            (excludedPreview.length ? ` | 제외 ${result.filtered.length}건 예시: ${excludedPreview.join(" / ")}` : ""),
+        );
+      }
+    }
 
-    bullets = [...new Set(bullets)];
+    bullets = definition.number === "22" ? bullets : [...new Set(bullets)];
     links = validLinks(links);
-    const missing = bullets.length === 0 || bullets.every((bullet) => bullet === MISSING_TEXT);
+    const missing = definition.number === "22" ? unverifiedIsEmpty : bullets.length === 0 || bullets.every((bullet) => bullet === MISSING_TEXT);
     const review = definition.number === "20" && matches[0] ? parseReview(matches[0].summary) : undefined;
     return {
       ...definition,
-      bullets: review ? [] : missing ? [MISSING_TEXT] : bullets,
+      bullets: review ? [] : missing ? [definition.number === "22" ? NO_UNVERIFIED_TEXT : MISSING_TEXT] : bullets,
+      overflowBullets: missing ? [] : overflowBullets,
       summary: review?.overview,
       groups: review?.groups ?? [],
       structuredItems: matches.flatMap((section) => section.structured_items ?? []),
       reportCount: matches.reduce((count, section) => count + (section.report_count ?? 0), 0) || undefined,
-      sourceNote: missing ? "미확인" : definition.number === "22" ? "추가 확인 필요" : sourceNoteFor(matches, links),
+      sourceNote: missing ? (definition.number === "22" ? "확인 필요 항목 없음" : "미확인") : definition.number === "22" ? "추가 확인 필요" : sourceNoteFor(matches, links),
       links,
       missing,
     };
@@ -212,9 +243,19 @@ export function ResearchItemGrid(props: ResearchItemGridProps) {
               ))}
             </div>
           ) : item.bullets.length > 0 && (
-            <ul className="research-item-bullets">
-              {item.bullets.map((bullet, index) => <li key={`${item.number}-${index}`}>{bullet}</li>)}
-            </ul>
+            <>
+              <ul className="research-item-bullets">
+                {item.bullets.map((bullet, index) => <li key={`${item.number}-${index}`}>{bullet}</li>)}
+              </ul>
+              {item.overflowBullets.length > 0 && (
+                <details className="research-item-overflow">
+                  <summary>더 보기 (+{item.overflowBullets.length})</summary>
+                  <ul className="research-item-bullets">
+                    {item.overflowBullets.map((bullet, index) => <li key={`${item.number}-overflow-${index}`}>{bullet}</li>)}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
           <footer className="research-item-footer">
             <span className={`research-status${item.missing ? " missing" : ""}`}>
