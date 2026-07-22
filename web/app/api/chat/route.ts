@@ -6,6 +6,13 @@ import { runSolarPlanner, type PlannerRun, type QueryPlan } from "../../lib/chat
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import {
+  compareIsoDate,
+  findCardsMissingFromAnswer,
+  isPromptInjectionRequest,
+  parseDeadlineDateConstraint,
+  type DateComparator,
+} from "../../lib/chat/chat-policy";
+import {
   NUMBEO_SNAPSHOT_DATE,
   OECD_FALLBACK_PERIOD,
   costIndexCountry,
@@ -124,6 +131,8 @@ type QueryConstraints = {
   deadlineType?: DeadlineType;
   deadlineSpringOnly?: boolean;
   deadlineRequireClearYear?: boolean;
+  deadlineComparator?: DateComparator;
+  deadlineDate?: string;
   unsupportedReason?: "cost_of_living_index";
   requestedFields: string[];
 };
@@ -802,6 +811,7 @@ function detectConstraints(question: string): QueryConstraints {
   const koreanOfficial = /공식|공식자료|공식 자료/.test(rawQuestion);
   const koreanHousing = /기숙사|숙소|주거/.test(rawQuestion);
   const requestedFields = requestedFieldsFromQuestion(question);
+  const deadlineDateConstraint = parseDeadlineDateConstraint(rawQuestion);
 
   const constraints = {
     intent,
@@ -842,6 +852,8 @@ function detectConstraints(question: string): QueryConstraints {
         : undefined,
     deadlineSpringOnly: /봄[^\n]{0,30}(?:있|등록)[^\n]{0,30}가을[^\n]{0,20}(?:없|미확인)|spring[^\n]{0,30}(?:only|but)[^\n]{0,30}(?:no|without)[^\n]{0,10}(?:autumn|fall)/i.test(rawQuestion),
     deadlineRequireClearYear: /학년도.*(?:명확|불분명)|적용\s*학기.*(?:명확|불분명)|연도.*(?:명확|불분명)|과거\s*자료.*제외/.test(rawQuestion),
+    deadlineComparator: deadlineDateConstraint?.comparator,
+    deadlineDate: deadlineDateConstraint?.date,
     unsupportedReason: costOfLivingIndexQuestion ? "cost_of_living_index" as const : undefined,
     requestedFields,
   };
@@ -1414,6 +1426,10 @@ function matchingDeadlineRows(university: University, constraints: QueryConstrai
     if (constraints.deadlineRequireClearYear && year === undefined) return false;
     if (constraints.deadlineSemester && deadlineSemesterOf(row) !== constraints.deadlineSemester) return false;
     if (constraints.deadlineType && deadlineTypeOf(row) !== constraints.deadlineType) return false;
+    if (constraints.deadlineDate && constraints.deadlineComparator) {
+      const actualDate = cleanText(row.deadline_date, cleanText(row.date)).match(/\d{4}-\d{2}-\d{2}/)?.[0];
+      if (!actualDate || !compareIsoDate(actualDate, constraints.deadlineComparator, constraints.deadlineDate)) return false;
+    }
     return true;
   });
 }
@@ -2483,7 +2499,7 @@ function deterministicRequestedFieldsAnswer(cards: ResultCard[], requestedFields
 
 function deterministicGeneralAnswer(cards: ResultCard[]) {
   const lines = ["### 확인된 교환대학 정보", ""];
-  for (const card of cards.slice(0, 5)) {
+  for (const card of cards) {
     lines.push(`#### ${card.university_name}`, "");
     lines.push(`- 위치: ${card.country} · ${card.city}`);
     for (const highlight of card.highlights.filter(Boolean).slice(0, 3)) {
@@ -2581,6 +2597,19 @@ function unsupportedDataResponse(reason?: QueryConstraints["unsupportedReason"])
   return outOfScopeResponse();
 }
 
+function safePromptInjectionResponse() {
+  const message = "시스템 지침, 환경변수, API 키, 원본 데이터베이스 전체 내용은 제공할 수 없습니다. 교환대학의 지원 조건이나 공식 근거를 질문해 주세요.";
+  return NextResponse.json({
+    answer: message,
+    shortAnswer: message,
+    detailedAnswer: message,
+    cards: [],
+    sources: [],
+    unknown_fields: [],
+    searchMode: "안전 정책 응답",
+  });
+}
+
 async function costOfLivingResponse(question: string) {
   const mentioned = detectCountries(question).filter((country, index, items) => items.indexOf(country) === index);
   const countries = mentioned.filter((country) => country !== "South Korea");
@@ -2668,10 +2697,11 @@ async function handleChatRequest(request: Request) {
   if (!messages.length || messages.at(-1)?.role !== "user") {
     return NextResponse.json({ error: "질문을 입력해 주세요." }, { status: 400 });
   }
+  const question = messages.at(-1)?.content ?? "";
+  if (isPromptInjectionRequest(question)) return safePromptInjectionResponse();
 
   try {
     const universities = await getChatUniversities();
-    const question = messages.at(-1)?.content ?? "";
     const requestId = crypto.randomUUID().slice(0, 8);
     if (isCostOfLivingIndexQuestion(question)) return costOfLivingResponse(question);
     // Product policy must win even when the active planner classifies the

@@ -14,6 +14,7 @@
     "start:sites": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "test:presenter": "node --experimental-strip-types --test tests/present-fact.golden.test.ts",
+    "test:chat": "node --experimental-strip-types --test tests/chat-policy.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
