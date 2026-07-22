@@ -167,11 +167,13 @@ export function prepareResearchItems({
       overflowBullets = result.overflow;
       unverifiedIsEmpty = result.shown.length === 0 && result.overflow.length === 0;
       if (process.env.NODE_ENV !== "production" && unknowns.length) {
-        const before = unknowns.length;
         const after = result.shown.length + result.overflow.length;
+        // presentUnknowns 내부에서 완전히 같은 문자열은 먼저 하나로 합치므로, raw unknowns.length가
+        // 아니라 (표시 + 접힘 + 제외)의 합을 "필터 전" 값으로 써야 두 숫자가 항상 맞아떨어진다.
+        const before = after + result.filtered.length;
         const excludedPreview = result.filtered.slice(0, 5);
         console.info(
-          `[research-item-22] ${universityName ?? "(대학명 미상)"}: 필터 전 ${before}건 -> 후 ${after}건` +
+          `[research-item-22] ${universityName ?? "(대학명 미상)"}: 필터 전 ${before}건(원본 ${unknowns.length}건) -> 후 ${after}건` +
             (excludedPreview.length ? ` | 제외 ${result.filtered.length}건 예시: ${excludedPreview.join(" / ")}` : ""),
         );
       }
