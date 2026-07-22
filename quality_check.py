@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from extract_university import is_unverified_item_shape_valid, unverified_item_display_text
 from validate_university import DEFAULT_SCHEMA, load_json, validate_document
 
 
@@ -70,6 +71,38 @@ def clean_document(document: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
                 "exact_duplicates_removed",
                 field,
                 f"완전히 동일한 행 {removed}개를 제거했습니다.",
+                True,
+            ))
+
+    # extract_university.clean_unverified 가 이미 형태 검증으로 대부분 걸러내지만,
+    # 캐시된 이전 추출 결과를 재처리하는 경우 등을 대비해 같은 규칙을 한 번 더 적용하고
+    # 몇 개를 제외했는지 quality_report 에 남긴다. 정상 동작 시 이 값은 0이어야 하며,
+    # 0이 아니면 clean_unverified 의 형태 검증이 약해졌다는 신호다.
+    unverified_rows = cleaned.get("unverified_items", [])
+    if isinstance(unverified_rows, list):
+        shape_valid: list[Any] = []
+        shape_rejected: list[Any] = []
+        for row in unverified_rows:
+            if isinstance(row, dict) and is_unverified_item_shape_valid(
+                str(row.get("field_name") or ""), row.get("details")
+            ):
+                shape_valid.append(row)
+            elif isinstance(row, dict):
+                shape_rejected.append(row)
+            else:
+                shape_valid.append(row)
+        cleaned["unverified_items"] = shape_valid
+        if shape_rejected:
+            preview = "; ".join(
+                unverified_item_display_text(str(row.get("field_name") or ""), row.get("details"))[:80]
+                for row in shape_rejected[:5]
+            )
+            issues.append(issue(
+                "warning",
+                "unverified_item_shape_rejected",
+                "unverified_items",
+                f"확정된 값·완결 문장·재귀 증식으로 판단되는 항목 {len(shape_rejected)}개를 제외했습니다. "
+                f"예: {preview}",
                 True,
             ))
 

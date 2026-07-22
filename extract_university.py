@@ -130,7 +130,14 @@ Evidence rules:
 9. Allowed reason values: not_found_in_official_sources, not_publicly_available,
 only_in_skku_material, outdated_source, varies_by_department_or_semester,
 only_in_unofficial_sources, ambiguous.
-10. Keep source wording in English where it is useful; do not translate names of programs."""
+10. Keep source wording in English where it is useful; do not translate names of programs.
+11. field_name and details in unverified_items must each be a short noun phrase naming ONLY
+what could not be confirmed (e.g. "정확한 GPA 기준", "비자 발급 소요 기간"). Never put a
+confirmed value, a section summary, or a complete sentence with a subject and a verb ending
+(such as "...입니다", "...합니다", "...가능합니다") into field_name or details -- if you have
+an actual value or a descriptive sentence, that belongs in the structured field it describes,
+not in unverified_items. Do not repeat the same field_name across multiple entries with only
+a word or two changed."""
 
 
 def request_with_retry(request: Callable[[], httpx.Response], description: str) -> httpx.Response:
@@ -311,10 +318,156 @@ Source documents:
 """
 
 
+# unverified_items 의 field_name/details 는 "확인하지 못한 것의 이름"만 담는 서술어 없는
+# 명사구여야 한다("정확한 GPA 기준", "비자 발급 소요 기간"). reason 값만 검사하던 기존
+# clean_unverified 는 모델이 확정된 값이나 섹션 요약문, 완결 문장을 그대로 흘려보내도
+# 걸러내지 못했다. 아래 형태 검사는 app/lib/display/present-fact.ts 의 presentUnknowns 가
+# 표시 단계에서 쓰는 것과 같은 규칙이며, 실제 53개 대학 데이터로 과잉 제거를 검증했다.
+
+_ASSERTIVE_PREDICATE_PATTERN = re.compile(r"(제공|운영|권장|위치|가능)(?:한|하는|된|되는)")
+_ASSERTIVE_PREDICATE_ENDINGS = ("입니다", "합니다")
+_FIELD_STATUS_TEMPLATE_SUFFIX = "공식 근거 기반 구조화 값 추가 확인 필요"
+
+
+def _strip_trailing_parenthetical(text: str) -> str:
+    return re.sub(r"\s*\([^)]*\)\s*$", "", text).strip()
+
+
+def _ends_like_complete_sentence(text: str) -> bool:
+    trimmed = text.strip()
+    if not trimmed:
+        return False
+    if re.search(r"[.!?]$", trimmed):
+        return True
+    core = _strip_trailing_parenthetical(trimmed)
+    if not core:
+        return False
+    return bool(re.search(r"(다|요|음|함)$", core))
+
+
+def _is_field_status_template(item: str) -> bool:
+    if ":" not in item:
+        return False
+    _, _, remainder = item.partition(":")
+    return remainder.strip() == _FIELD_STATUS_TEMPLATE_SUFFIX
+
+
+def is_noun_phrase_shaped(item: str) -> bool:
+    """확인하지 못한 것의 이름만 가리키는 서술어 없는 명사구인지 판정한다."""
+    if _is_field_status_template(item):
+        return True
+    if _ends_like_complete_sentence(item):
+        return False
+    if any(marker in item for marker in _ASSERTIVE_PREDICATE_ENDINGS):
+        return False
+    if _ASSERTIVE_PREDICATE_PATTERN.search(item):
+        return False
+    if ":" in item:
+        _, _, remainder = item.partition(":")
+        remainder = remainder.strip()
+        if remainder and _ends_like_complete_sentence(remainder):
+            return False
+    return True
+
+
+def has_repeated_token(item: str) -> bool:
+    """같은 어절이 반복되면 추출 모델의 자기복제(재귀 증식) 흔적으로 본다.
+
+    "및"으로 이어진 서로 다른 절에서 같은 단어를 한 번씩 재사용하는 것은
+    (예: "학점 인정 절차 및 학점 상한") 정상적인 명사구이므로, 반복 검사는
+    "및"으로 나눈 각 절 내부에서만 본다.
+    """
+    for clause in re.split(r"\s*및\s*", item):
+        tokens = clause.strip().split()
+        seen: set[str] = set()
+        for token in tokens:
+            if token in seen:
+                return True
+            seen.add(token)
+    return False
+
+
+def unverified_item_display_text(field_name: str, details: Any) -> str:
+    details_text = details.strip() if isinstance(details, str) else ""
+    return f"{field_name}: {details_text}" if details_text else field_name
+
+
+def is_unverified_item_shape_valid(field_name: str, details: Any) -> bool:
+    text = unverified_item_display_text(field_name, details)
+    if not text.strip():
+        return False
+    return is_noun_phrase_shaped(text) and not has_repeated_token(text)
+
+
+def _is_strict_token_prefix(short_tokens: list[str], long_tokens: list[str]) -> bool:
+    if len(short_tokens) >= len(long_tokens):
+        return False
+    return short_tokens == long_tokens[: len(short_tokens)]
+
+
+def _drop_proliferation_chains(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """어떤 항목이 다른 항목을 접두사로 완전히 포함하면서 길이만 늘어난 관계가 3개
+    이상 사슬로 이어지면, 그 사슬에서 가장 짧은(원본) 항목 하나만 남긴다.
+    """
+    texts = [unverified_item_display_text(item["field_name"], item["details"]) for item in candidates]
+    token_lists = [text.strip().split() for text in texts]
+
+    parent: dict[int, int] = {}
+    for index, tokens in enumerate(token_lists):
+        best_parent: int | None = None
+        best_length = -1
+        for other_index, other_tokens in enumerate(token_lists):
+            if other_index == index:
+                continue
+            if _is_strict_token_prefix(other_tokens, tokens) and len(other_tokens) > best_length:
+                best_parent = other_index
+                best_length = len(other_tokens)
+        if best_parent is not None:
+            parent[index] = best_parent
+
+    def chain_root(index: int) -> int:
+        current = index
+        visited: set[int] = set()
+        while current in parent and current not in visited:
+            visited.add(current)
+            current = parent[current]
+        return current
+
+    groups: dict[int, list[int]] = {}
+    for index in range(len(candidates)):
+        root = chain_root(index)
+        groups.setdefault(root, []).append(index)
+
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates):
+        root = chain_root(index)
+        if len(groups[root]) >= 3:
+            (kept if index == root else dropped).append(candidate)
+        else:
+            kept.append(candidate)
+    return kept, dropped
+
+
+# 한 대학 문서는 university/program/그룹별 partial 등 여러 차례 clean_unverified 를
+# 거치므로, 이번 문서에서 버린 항목을 assemble_standard_document 가 끝날 때 한 번에
+# 보고할 수 있도록 누적한다. 대학별 추출을 시작할 때 reset_dropped_unverified_items 로
+# 비운다.
+_dropped_unverified_items: list[dict[str, Any]] = []
+
+
+def reset_dropped_unverified_items() -> None:
+    _dropped_unverified_items.clear()
+
+
+def dropped_unverified_items() -> list[dict[str, Any]]:
+    return list(_dropped_unverified_items)
+
+
 def clean_unverified(items: Any) -> list[dict[str, Any]]:
     if not isinstance(items, list):
         return []
-    cleaned: list[dict[str, Any]] = []
+    shape_valid: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -323,16 +476,24 @@ def clean_unverified(items: Any) -> list[dict[str, Any]]:
             reason = "ambiguous"
         category = str(item.get("category") or "general")
         field_name = str(item.get("field_name") or "unknown")
+        details = item.get("details")
         source_url = item.get("source_url")
         if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
             source_url = None
-        cleaned.append({
+        candidate = {
             "category": category,
             "field_name": field_name,
             "reason": reason,
-            "details": item.get("details"),
+            "details": details,
             "source_url": source_url,
-        })
+        }
+        if is_unverified_item_shape_valid(field_name, details):
+            shape_valid.append(candidate)
+        else:
+            _dropped_unverified_items.append(candidate)
+
+    cleaned, chain_dropped = _drop_proliferation_chains(shape_valid)
+    _dropped_unverified_items.extend(chain_dropped)
     return cleaned
 
 
@@ -541,6 +702,7 @@ def assemble_standard_document(
     program_name: str,
     research_date: str,
 ) -> dict[str, Any]:
+    reset_dropped_unverified_items()
     university: dict[str, Any] = {
         "university_name": university_name,
         "country": None,
@@ -613,6 +775,15 @@ def assemble_standard_document(
         "unverified_items": deduplicate_rows(unverified),
     }
     normalize_nullable_sentinels(result)
+
+    dropped = dropped_unverified_items()
+    if dropped:
+        preview = "; ".join(unverified_item_display_text(item["field_name"], item["details"])[:80] for item in dropped[:5])
+        print(
+            f"[extract_university] {university_name}: 형태 검증 실패로 unverified_items {len(dropped)}개 제외 (예: {preview})",
+            file=sys.stderr,
+        )
+
     return result
 
 

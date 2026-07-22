@@ -54,6 +54,20 @@ class QualityCheckTests(unittest.TestCase):
         self.assertEqual(cleaned["estimated_costs"][0]["amount_min"], 500)
         self.assertEqual(cleaned["estimated_costs"][0]["amount_max"], 800)
 
+    def test_misshapen_unverified_item_is_rejected_as_a_safety_net(self):
+        # In normal operation extract_university.clean_unverified already removes
+        # these before quality_check ever sees them; this covers a cached/older
+        # generated.json being reprocessed, or a regression in that upstream check.
+        document = self.base_document()
+        document["unverified_items"] = [
+            {"category": "housing", "field_name": "SDU Fitness", "reason": "ambiguous", "details": "월 149 DKK로 이용 가능.", "source_url": None},
+            {"category": "gpa", "field_name": "정확한 GPA 기준", "reason": "ambiguous", "details": None, "source_url": None},
+        ]
+        cleaned, report = clean_document(document)
+        self.assertEqual([row["field_name"] for row in cleaned["unverified_items"]], ["정확한 GPA 기준"])
+        self.assertTrue(any(item["code"] == "unverified_item_shape_rejected" for item in report["issues"]))
+        self.assertEqual(report["summary"]["counts_after"]["unverified_items"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
