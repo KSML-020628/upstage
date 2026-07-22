@@ -2758,8 +2758,14 @@ async function handleChatRequest(request: Request) {
     if (isRemovedCostRecommendation(question, 0)) {
       return removedCostFeatureResponse();
     }
-    const detectedConstraints = detectConversationConstraints(messages);
     const explicitFollowup = contextUniversityIds.length > 0 && isFollowupReference(question);
+    // Only fold prior turns' conditions in when this turn explicitly signals
+    // it's a continuation ("그중", "거기", ...). A plain new question with no
+    // such marker is a topic change and must be evaluated on its own -- carrying
+    // an earlier turn's requirements into it would silently narrow an
+    // unrelated question (e.g. an earlier "기숙사 있는 곳만" leaking into a later,
+    // unrelated "아이엘츠 6.0 대학 알려줘" that never mentioned housing).
+    const detectedConstraints = explicitFollowup ? detectConversationConstraints(messages) : detectConstraints(question);
     const legacyConstraints: QueryConstraints = explicitFollowup
       ? { ...detectedConstraints, inScope: true }
       : detectedConstraints;
