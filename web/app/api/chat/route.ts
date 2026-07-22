@@ -868,6 +868,55 @@ function detectConstraints(question: string): QueryConstraints {
   };
 }
 
+// A real conversation shouldn't need "IELTS 6.0" repeated in every turn just
+// to keep filtering by it -- carry a turn's conditions forward the way a
+// human would remember them, until the client starts a new conversation
+// (a fresh sessionId / an empty message history resets this naturally, since
+// there's nothing to fold in).
+//
+// Geographic scope (requireEurope/requireAsia/requireAmericas/countries/
+// excludedCountries/excludeAsia) is deliberately NOT carried forward here.
+// selectCards still applies those to an exact-name match even when the
+// question names one specific university (e.g. "그 대학의 IELTS는?"), and if
+// an earlier unrelated turn had said "유럽 대학만", that scope would wrongly
+// hide a later, explicitly-named non-European university. The existing
+// contextUniversityIds + isFollowupReference mechanism already carries
+// forward *which universities* a "그중" follow-up should stay inside; this
+// only restores conditions like score/GPA/major/housing/deadline that
+// otherwise silently reset every turn.
+function mergeConversationConstraints(base: QueryConstraints, current: QueryConstraints): QueryConstraints {
+  return {
+    ...current,
+    languageTest: current.languageTest ?? base.languageTest,
+    languageScore: current.languageScore ?? base.languageScore,
+    languageSubscore: current.languageSubscore ?? base.languageSubscore,
+    gpa: current.gpa ?? base.gpa,
+    major: current.major ?? base.major,
+    budgetKrwSemester: current.budgetKrwSemester ?? base.budgetKrwSemester,
+    quotaMin: current.quotaMin ?? base.quotaMin,
+    quotaMode: current.quotaMode ?? base.quotaMode,
+    deadlineAcademicYear: current.deadlineAcademicYear ?? base.deadlineAcademicYear,
+    deadlineSemester: current.deadlineSemester ?? base.deadlineSemester,
+    deadlineType: current.deadlineType ?? base.deadlineType,
+    deadlineComparator: current.deadlineComparator ?? base.deadlineComparator,
+    deadlineDate: current.deadlineDate ?? base.deadlineDate,
+    requireHousing: current.requireHousing || base.requireHousing,
+    requireHousingGuaranteed: current.requireHousingGuaranteed || base.requireHousingGuaranteed,
+    requireHousingMissing: current.requireHousingMissing || base.requireHousingMissing,
+  };
+}
+
+function detectConversationConstraints(messages: ChatMessage[]): QueryConstraints {
+  const userTurns = messages.filter((message) => message.role === "user").map((message) => message.content);
+  return userTurns.reduce<QueryConstraints | undefined>(
+    (accumulated, text) => {
+      const detected = detectConstraints(text);
+      return accumulated ? mergeConversationConstraints(accumulated, detected) : detected;
+    },
+    undefined,
+  )!;
+}
+
 const REQUEST_FIELD_TO_INTENT: Record<string, Intent> = {
   universities: "general",
   language_requirements: "language",
@@ -2709,7 +2758,7 @@ async function handleChatRequest(request: Request) {
     if (isRemovedCostRecommendation(question, 0)) {
       return removedCostFeatureResponse();
     }
-    const detectedConstraints = detectConstraints(question);
+    const detectedConstraints = detectConversationConstraints(messages);
     const explicitFollowup = contextUniversityIds.length > 0 && isFollowupReference(question);
     const legacyConstraints: QueryConstraints = explicitFollowup
       ? { ...detectedConstraints, inScope: true }
