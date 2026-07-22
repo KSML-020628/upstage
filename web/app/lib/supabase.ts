@@ -95,6 +95,13 @@ async function request<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function cleanMultilineText(value: unknown, fallback = ""): string {
+  if (typeof value !== "string") return fallback;
+  const text = value.replace(/\r/g, "").split("\n").map((line) => line.replace(/[ \t]+/g, " ").trim()).filter(Boolean).join("\n");
+  if (!text || text.includes("???") || text.includes("\uFFFD")) return fallback;
+  return text;
+}
+
 async function requestAll<T>(path: string, pageSize = 1000): Promise<T[]> {
   const rows: T[] = [];
   let offset = 0;
@@ -142,9 +149,17 @@ function sectionsFromFacts(profile: Record<string, unknown> | undefined, facts: 
   const profileSections = asArray(profile?.sections).map((item) => ({
     section_number: cleanText(item.section_number, ""),
     section_title: cleanText(item.section_title, ""),
-    summary: cleanText(item.summary, ""),
+    summary: cleanMultilineText(item.summary, ""),
     source_note: cleanText(item.source_note, ""),
     evidence_url: cleanText(item.evidence_url, ""),
+    report_count: typeof item.report_count === "number" ? item.report_count : undefined,
+    structured_items: asArray(item.structured_items).map((entry) => ({
+      title: cleanText(entry.title, "정보"),
+      fields: asArray(entry.fields).map((field) => ({
+        label: cleanText(field.label, "항목"),
+        value: cleanText(field.value, ""),
+      })).filter((field) => field.value),
+    })).filter((entry) => entry.fields.length),
   })).filter((item) => item.section_number && item.summary);
   if (profileSections.length) return profileSections;
 

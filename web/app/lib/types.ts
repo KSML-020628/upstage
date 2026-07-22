@@ -145,4 +145,9 @@ export type ProfileSection = {
   summary: string;
   source_note?: string;
   evidence_url?: string;
+  report_count?: number;
+  structured_items?: Array<{
+    title: string;
+    fields: Array<{ label: string; value: string }>;
+  }>;
 };

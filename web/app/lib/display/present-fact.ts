@@ -182,8 +182,12 @@ function minimumSubscore(row: FactRow): number | undefined {
 export function presentLanguage(row: FactRow): PresentedField {
   const test = compactText(row.test_type) || compactText(row.language) || "어학 조건";
   const base = baseField(row, "language_requirement", test);
-  const score = numericValue(row.minimum_score ?? row.overall_score);
-  const cefr = compactText(row.cefr_level || row.level);
+  const embeddedCefr = test.match(/\b([ABC][12])\b/i)?.[1]?.toUpperCase();
+  const cefr = compactText(row.cefr_level || row.level) || embeddedCefr;
+  const score = embeddedCefr && numericValue(row.minimum_score) === Number(embeddedCefr.slice(1))
+    ? undefined
+    : numericValue(row.minimum_score ?? row.overall_score);
+  const language = compactText(row.language) || (/german/i.test(test) ? "독일어" : /english/i.test(test) ? "영어" : test.replace(/\blevel\b/ig, "").replace(/\b[ABC][12]\b/ig, "").trim());
   const parts: string[] = [];
   if (score !== undefined) parts.push(`최소 ${/ielts/i.test(test) ? numberLabel(score, 1) : numberLabel(score)}`);
   else if (cefr) parts.push(`CEFR ${cefr}`);
@@ -193,7 +197,7 @@ export function presentLanguage(row: FactRow): PresentedField {
   else if (row.is_required === false) parts.push("필수 아님");
   else parts.push("필수 여부 확인 필요");
   if (!score && !cefr) parts.unshift("점수 확인 필요");
-  return { ...base, status: score !== undefined || cefr ? rowStatus(row) : "unknown", value: parts.join(" · ") };
+  return { ...base, label: language || "어학 조건", status: score !== undefined || cefr ? rowStatus(row) : "unknown", value: parts.join(" · ") };
 }
 
 export function presentDeadline(row: FactRow): PresentedField {
