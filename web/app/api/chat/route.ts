@@ -4,6 +4,15 @@ import type { ExchangeProgram, ProfileSection, University } from "../../lib/type
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
 import { runSolarPlanner, type PlannerRun, type QueryPlan } from "../../lib/chat/query-plan";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
+import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
+import {
+  NUMBEO_SNAPSHOT_DATE,
+  OECD_FALLBACK_PERIOD,
+  costIndexCountry,
+  costIndexCountryLabel,
+  costOfLivingIndex,
+  loadCostOfLivingSnapshot,
+} from "../../lib/cost-of-living";
 import {
   presentConditionCheck,
   presentCost,
@@ -87,6 +96,7 @@ type QueryConstraints = {
   topN: number;
   requireEurope: boolean;
   requireAsia: boolean;
+  requireAmericas: boolean;
   inScope: boolean;
   requireHousing: boolean;
   requireHousingGuaranteed: boolean;
@@ -115,6 +125,7 @@ type QueryConstraints = {
   deadlineSpringOnly?: boolean;
   deadlineRequireClearYear?: boolean;
   unsupportedReason?: "cost_of_living_index";
+  requestedFields: string[];
 };
 
 type CostComponent = {
@@ -196,7 +207,13 @@ const ASIA_COUNTRIES = new Set([
   "singapore", "south korea", "korea", "taiwan", "thailand", "turkey", "vietnam",
 ]);
 
+const AMERICAS_COUNTRIES = new Set([
+  "argentina", "brazil", "canada", "chile", "colombia", "ecuador", "mexico", "peru",
+  "united states", "usa", "united states of america",
+]);
+
 const COUNTRY_ALIASES: Array<{ country: string; patterns: RegExp[] }> = [
+  { country: "South Korea", patterns: [/대한민국|한국/, /south korea|republic of korea|korea/] },
   { country: "France", patterns: [/프랑스/, /france|french/] },
   { country: "Germany", patterns: [/독일/, /germany|german/] },
   { country: "Austria", patterns: [/오스트리아/, /austria/] },
@@ -212,6 +229,18 @@ const COUNTRY_ALIASES: Array<{ country: string; patterns: RegExp[] }> = [
   { country: "Brazil", patterns: [/브라질/, /brazil/] },
   { country: "Ecuador", patterns: [/에콰도르/, /ecuador/] },
   { country: "Japan", patterns: [/일본/, /japan/] },
+  { country: "Netherlands", patterns: [/네덜란드/, /netherlands|dutch/] },
+  { country: "Sweden", patterns: [/스웨덴/, /sweden|swedish/] },
+  { country: "Switzerland", patterns: [/스위스/, /switzerland|swiss/] },
+  { country: "Norway", patterns: [/노르웨이/, /norway|norwegian/] },
+  { country: "Portugal", patterns: [/포르투갈/, /portugal|portuguese/] },
+  { country: "Spain", patterns: [/스페인/, /spain|spanish/] },
+  { country: "Turkey", patterns: [/튀르키예|터키/, /turkey|turkiye|türkiye/] },
+  { country: "Thailand", patterns: [/태국/, /thailand|thai/] },
+  { country: "Indonesia", patterns: [/인도네시아/, /indonesia|indonesian/] },
+  { country: "Vietnam", patterns: [/베트남/, /vietnam|vietnamese/] },
+  { country: "United States", patterns: [/미국/, /united states|usa|u\.s\.a\.?/] },
+  { country: "Peru", patterns: [/페루/, /peru|peruvian/] },
 ];
 
 const CURRENCY_TO_KRW: Record<string, number> = {
@@ -719,8 +748,11 @@ function detectMajor(question: string) {
 }
 
 function countryMentionIsExcluded(rawText: string, matchIndex: number, matchLength: number) {
-  const context = rawText.slice(Math.max(0, matchIndex - 24), Math.min(rawText.length, matchIndex + matchLength + 24));
-  return /제외|빼고|말고|아닌|제외하고|except|exclude|without/.test(context);
+  const before = rawText.slice(Math.max(0, matchIndex - 14), matchIndex);
+  const after = rawText.slice(matchIndex + matchLength, Math.min(rawText.length, matchIndex + matchLength + 14));
+  const exclusion = "(?:제외(?:하고)?|빼고|말고|아닌|except|exclude|without)";
+  return new RegExp(`${exclusion}\\s*$`, "i").test(before)
+    || new RegExp(`^\\s*(?:은|는|을|를|도|과|와|,)?\\s*${exclusion}`, "i").test(after);
 }
 
 function detectCountries(question: string) {
@@ -769,12 +801,14 @@ function detectConstraints(question: string): QueryConstraints {
   const koreanClearCost = /명확|숫자|공식 출처|출처가 있는|확인된|구체적인|비용 정보가 있는/.test(rawQuestion);
   const koreanOfficial = /공식|공식자료|공식 자료/.test(rawQuestion);
   const koreanHousing = /기숙사|숙소|주거/.test(rawQuestion);
+  const requestedFields = requestedFieldsFromQuestion(question);
 
   const constraints = {
     intent,
     requireAsia:
       /아시아|asia/i.test(question) &&
       !/(?:아시아|asia)[^\n]{0,18}(?:제외|빼고|빼줘|exclude|without)|(?:제외|빼고|빼줘|exclude|without)[^\n]{0,18}(?:아시아|asia)/i.test(question),
+    requireAmericas: /미주|북미|남미|아메리카|americas?|north america|south america/i.test(rawQuestion),
     sortGpaLowest: /(?:학점|gpa)[^\n]{0,30}(?:가장\s*낮|낮은\s*순|최저|lowest|ascending)|(?:가장\s*낮|낮은\s*순|최저|lowest)[^\n]{0,30}(?:학점|gpa)/i.test(question),
     topN: Math.max(1, Math.min(8, topValue ? Number(topValue) : 4)),
     requireEurope: /유럽|europe|european/.test(text) || /유럽|europe|european/.test(rawQuestion),
@@ -798,7 +832,7 @@ function detectConstraints(question: string): QueryConstraints {
     requireGpaKnown: /gpa.*(?:확인|공식)|(?:확인|공식).*gpa/i.test(rawQuestion),
     requireQuotaKnown: /quota.*(?:확인|공식)|(?:확인|공식).*quota/i.test(rawQuestion),
     requireHousingMissing: /기숙사\s*(?:정보가\s*)?(?:없는|없고|미확인)|housing[^\n]{0,20}(?:missing|unknown|without)/i.test(rawQuestion),
-    sortDeadlineEarliest: intent === "deadline" || /빠른|가장 먼저|earliest|soonest/.test(text) || /빠른|가장 먼저|earliest|soonest/.test(rawQuestion),
+    sortDeadlineEarliest: /빠른|가장\s*먼저|이른|earliest|soonest/.test(text) || /빠른|가장\s*먼저|이른|earliest|soonest/.test(rawQuestion),
     deadlineAcademicYear: Number(rawQuestion.match(/\b(20\d{2})(?:\s*\/\s*\d{2,4})?/)?.[1]) || undefined,
     deadlineSemester: /가을|autumn|fall/.test(rawQuestion) ? "autumn" as const : /봄|spring/.test(rawQuestion) ? "spring" as const : undefined,
     deadlineType: /nomination|노미네이션|지명/.test(rawQuestion) && !/application|지원\s*마감/.test(rawQuestion)
@@ -809,6 +843,7 @@ function detectConstraints(question: string): QueryConstraints {
     deadlineSpringOnly: /봄[^\n]{0,30}(?:있|등록)[^\n]{0,30}가을[^\n]{0,20}(?:없|미확인)|spring[^\n]{0,30}(?:only|but)[^\n]{0,30}(?:no|without)[^\n]{0,10}(?:autumn|fall)/i.test(rawQuestion),
     deadlineRequireClearYear: /학년도.*(?:명확|불분명)|적용\s*학기.*(?:명확|불분명)|연도.*(?:명확|불분명)|과거\s*자료.*제외/.test(rawQuestion),
     unsupportedReason: costOfLivingIndexQuestion ? "cost_of_living_index" as const : undefined,
+    requestedFields,
   };
 
   return {
@@ -819,6 +854,31 @@ function detectConstraints(question: string): QueryConstraints {
     requireOfficialSource: koreanOfficial || constraints.requireOfficialSource,
     requireClearCost: koreanClearCost || constraints.requireClearCost,
   };
+}
+
+const REQUEST_FIELD_TO_INTENT: Record<string, Intent> = {
+  universities: "general",
+  language_requirements: "language",
+  housing_options: "housing",
+  estimated_costs: "cost",
+  application_deadlines: "deadline",
+  quota_facts: "quota",
+  course_restrictions: "restriction",
+  source_links: "source",
+};
+
+function requestedFieldsFromQuestion(question: string) {
+  const text = question.normalize("NFKC").toLowerCase();
+  const fields: string[] = [];
+  if (/ielts|아이엘츠|toefl|토플|어학|영어\s*성적|언어\s*조건/.test(text)) fields.push("language_requirements");
+  if (/기숙사|숙소|주거|housing|accommodation|dorm|residence/.test(text)) fields.push("housing_options");
+  if (/비용|생활비|학비|등록금|기숙사비|주거비|cost|fee|tuition/.test(text)) fields.push("estimated_costs");
+  if (/마감|일정|지원\s*기간|학기|nomination|deadline|application|semester/.test(text)) fields.push("application_deadlines");
+  if (/정원|쿼터|quota|몇\s*명/.test(text)) fields.push("quota_facts");
+  if (/수강\s*제한|전공\s*제한|선수\s*과목|course\s*restriction|prerequisite/.test(text)) fields.push("course_restrictions");
+  if (/출처|공식\s*(?:자료|링크)|근거|source/.test(text)) fields.push("source_links");
+  if (!fields.length) fields.push("universities");
+  return [...new Set(fields)];
 }
 
 function isEuropeanUniversity(university: University) {
@@ -834,6 +894,10 @@ function isEuropeanUniversity(university: University) {
 
 function isAsianUniversity(university: University) {
   return ASIA_COUNTRIES.has(normalizeSearchText(university.country));
+}
+
+function isAmericasUniversity(university: University) {
+  return AMERICAS_COUNTRIES.has(normalizeSearchText(university.country));
 }
 
 function matchesCountry(university: University, countries: string[]) {
@@ -1377,6 +1441,7 @@ function earliestMatchingDeadlineTime(university: University, constraints: Query
 function passesStructuredFilters(university: University, constraints: QueryConstraints) {
   if (constraints.requireEurope && !isEuropeanUniversity(university)) return false;
   if (constraints.requireAsia && !isAsianUniversity(university)) return false;
+  if (constraints.requireAmericas && !isAmericasUniversity(university)) return false;
   if (!matchesCountry(university, constraints.countries)) return false;
   if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) return false;
   if (constraints.excludeAsia && isAsianUniversity(university)) return false;
@@ -1440,6 +1505,9 @@ function evaluateUniversity(university: University, constraints: QueryConstraint
   }
   if (constraints.requireAsia) {
     add("region", "관심 대륙", isAsianUniversity(university) ? "met" : "failed", isAsianUniversity(university) ? "아시아 대학" : "아시아 외 대학");
+  }
+  if (constraints.requireAmericas) {
+    add("region", "관심 대륙", isAmericasUniversity(university) ? "met" : "failed", isAmericasUniversity(university) ? "미주 대학" : "미주 외 대학");
   }
   if (constraints.countries.length) {
     add("country", "국가", matchesCountry(university, constraints.countries) ? "met" : "failed", university.country);
@@ -1727,11 +1795,33 @@ function compactFactContext(cards: ResultCard[]) {
   }));
 }
 
-function makeCard(candidate: RankedCandidate, intent: Intent): ResultCard {
+function requestedFactBundle(
+  university: University,
+  primaryIntent: Intent,
+  requestedFields: string[],
+  primaryCost?: CostEstimate,
+) {
+  const intents = [
+    primaryIntent,
+    ...requestedFields.map((field) => REQUEST_FIELD_TO_INTENT[field]).filter((intent): intent is Intent => Boolean(intent)),
+  ].filter((intent, index, items) => items.indexOf(intent) === index);
+  const seen = new Set<string>();
+  return intents.flatMap((intent) => {
+    const cost = intent === "cost" ? (primaryCost ?? estimateSemesterCost(university, { requireClear: false })) : undefined;
+    return factBundleForCard(university, intent, cost);
+  }).filter((fact) => {
+    const key = fact.fact_id || `${fact.table}:${fact.value}:${fact.source_url ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 16);
+}
+
+function makeCard(candidate: RankedCandidate, intent: Intent, requestedFields: string[] = []): ResultCard {
   const { university, cost } = candidate;
   const rows = relevantRows(university, intent);
   const section = sectionText(university, intent);
-  const factBundle = factBundleForCard(university, intent, cost);
+  const factBundle = requestedFactBundle(university, intent, requestedFields, cost);
   const source = cost?.sourceUrl
     ? {
         fact_id: factBundle.find((fact) => fact.source_url === cost.sourceUrl)?.fact_id,
@@ -1800,7 +1890,15 @@ function findTargetUniversities(universities: University[], question: string) {
 }
 
 function isFollowupReference(question: string) {
-  return /방금\s*(?:추천한|말한)|이\s*대학들|위\s*(?:학교|대학)|앞서\s*(?:추천한|언급한)|those\s*(?:universities|schools)|these\s*(?:universities|schools)/i.test(question.normalize("NFKC"));
+  return /방금\s*(?:추천한|말한)|이\s*(?:학교|대학)들?|그\s*(?:학교|대학)들?|위\s*(?:학교|대학)들?|앞서\s*(?:추천한|언급한)|추천한\s*(?:학교|대학)들?|(?:둘|셋|넷|그|이)\s*중(?:에|에서)?|(?:첫|두|세)\s*번째\s*(?:학교|대학)|거기|그곳|그\s*(?:학교|대학)|어디가\s*더|어느\s*(?:곳|학교|대학)이?\s*더|조건이\s*더\s*(?:적|낮|쉬)|라고\s*했는데|왜\s+.+(?:추천|나와)|those\s*(?:universities|schools)|these\s*(?:universities|schools)|which\s+one/i.test(question.normalize("NFKC"));
+}
+
+function followupComparisonLimit(question: string) {
+  const normalized = question.normalize("NFKC").toLowerCase();
+  if (/둘\s*중/.test(normalized)) return 2;
+  if (/셋\s*중/.test(normalized)) return 3;
+  if (/넷\s*중/.test(normalized)) return 4;
+  return undefined;
 }
 
 function previousContextUniversities(universities: University[], messages: ChatMessage[]) {
@@ -1816,8 +1914,24 @@ function previousContextUniversities(universities: University[], messages: ChatM
 function explicitUnknownInstitution(question: string, exactTargets: University[]) {
   if (exactTargets.length) return undefined;
   const normalized = question.normalize("NFKC");
-  const match = normalized.match(/\b([A-Z][A-Za-z'&.-]*(?:\s+[A-Z][A-Za-z'&.-]*){1,7}\s+(?:University|College|School|Institute))\b/);
+  const match = normalized.match(/\b([A-Z][A-Za-z'&.-]*(?:\s+[A-Z][A-Za-z'&.-]*){0,6}\s+(?:University|College|School|Institute))\b/);
   return match?.[1];
+}
+
+function unknownInstitutionResponse(name: string, universityCount: number) {
+  const answer = `현재 등록된 ${universityCount}개 교환대학에서 **${name}**을(를) 찾지 못했습니다. 비슷한 이름의 다른 대학을 대신 추천하지 않았습니다.`;
+  return NextResponse.json({
+    answer,
+    shortAnswer: answer,
+    detailedAnswer: ["### 등록 대학 검색 결과", "", answer].join("\n"),
+    cards: [],
+    sources: [],
+    matched: [],
+    partially_matched: [],
+    excluded_count: 0,
+    unknown_fields: ["university"],
+    searchMode: "등록 대학명 정확 일치 검사 결과 없음",
+  });
 }
 
 function selectCards(universities: University[], constraints: QueryConstraints, question: string) {
@@ -1826,6 +1940,8 @@ function selectCards(universities: University[], constraints: QueryConstraints, 
     return exactTargets
       .filter((university) => {
         if (constraints.requireEurope && !isEuropeanUniversity(university)) return false;
+        if (constraints.requireAsia && !isAsianUniversity(university)) return false;
+        if (constraints.requireAmericas && !isAmericasUniversity(university)) return false;
         if (!matchesCountry(university, constraints.countries)) return false;
         if (constraints.excludedCountries.length && matchesCountry(university, constraints.excludedCountries)) return false;
         if (constraints.excludeAsia && isAsianUniversity(university)) return false;
@@ -1833,7 +1949,7 @@ function selectCards(universities: University[], constraints: QueryConstraints, 
       })
       .slice(0, constraints.topN)
       .map((university) => {
-        return makeCard({ university, score: 100 }, constraints.intent);
+        return makeCard({ university, score: 100 }, constraints.intent, constraints.requestedFields);
       });
   }
 
@@ -1854,7 +1970,7 @@ function selectCards(universities: University[], constraints: QueryConstraints, 
       })
       .slice(0, constraints.topN);
 
-    if (ranked.length) return ranked.map((candidate) => makeCard(candidate, constraints.intent));
+    if (ranked.length) return ranked.map((candidate) => makeCard(candidate, constraints.intent, constraints.requestedFields));
   }
 
   const ranked = pool
@@ -1874,13 +1990,14 @@ function selectCards(universities: University[], constraints: QueryConstraints, 
     })
     .slice(0, constraints.topN);
 
-  return ranked.map((candidate) => makeCard(candidate, constraints.intent));
+  return ranked.map((candidate) => makeCard(candidate, constraints.intent, constraints.requestedFields));
 }
 
 function hasRecommendationConditions(constraints: QueryConstraints) {
   return Boolean(
       constraints.requireEurope ||
       constraints.requireAsia ||
+      constraints.requireAmericas ||
       constraints.countries.length ||
       constraints.excludedCountries.length ||
       constraints.excludeAsia ||
@@ -1919,7 +2036,7 @@ function selectClassifiedCards(universities: University[], constraints: QueryCon
       })
       .slice(0, limit)
       .map(({ item, score }) => {
-        const card = makeCard({ university: item.university, score }, constraints.intent);
+        const card = makeCard({ university: item.university, score }, constraints.intent, constraints.requestedFields);
         card.match_status = item.status === "matched" ? "matched" : "partial";
         card.condition_checks = item.checks.map((check) => ({
           ...check,
@@ -2165,6 +2282,29 @@ function responsePresentation(detailedAnswer: string, cards: ResultCard[]) {
   };
 }
 
+function authoritativeShortAnswer(cards: ResultCard[], fallback: string) {
+  const classified = cards.filter((card) => card.match_status === "matched" || card.match_status === "partial");
+  if (!classified.length) return fallback;
+
+  const matched = classified.filter((card) => card.match_status === "matched");
+  const partial = classified.filter((card) => card.match_status === "partial");
+  const lines: string[] = [];
+
+  if (matched.length) {
+    lines.push(`조건을 모두 충족한 대학은 **${matched.length}곳**입니다.`);
+    lines.push(...matched.map((card) => `- ${card.university_name}`));
+  } else {
+    lines.push("현재 등록된 자료에서 모든 조건을 확인하고 충족한 대학은 없습니다.");
+  }
+
+  if (partial.length) {
+    lines.push("", `일부 조건을 추가로 확인해야 하는 후보는 **${partial.length}곳**입니다.`);
+    lines.push(...partial.map((card) => `- ${card.university_name}`));
+  }
+
+  return lines.join("\n");
+}
+
 function plannerIntent(intent: QueryPlan["intent"]): Intent | undefined {
   const map: Partial<Record<QueryPlan["intent"], Intent>> = {
     university_lookup: "general",
@@ -2190,14 +2330,16 @@ function applyValidatedPlannerPlan(legacy: QueryConstraints, plan: QueryPlan | n
   const languageTest = hard.ieltsMax !== undefined ? "IELTS" : hard.toeflMax !== undefined ? "TOEFL" : legacy.languageTest;
   const languageScore = hard.ieltsMax ?? hard.toeflMax ?? legacy.languageScore;
   const resolvedIntent = legacy.intent !== "general" ? legacy.intent : (plannedIntent ?? legacy.intent);
+  const requestedFields = [...new Set([...legacy.requestedFields, ...plan.requestedFields])];
   return {
     ...legacy,
     intent: resolvedIntent,
     topN: legacy.topN !== 4 ? legacy.topN : plan.limit,
     requireEurope: regions.some((item) => item === "europe") || legacy.requireEurope,
     requireAsia: regions.some((item) => item === "asia") || legacy.requireAsia,
-    countries: hard.countries?.length ? hard.countries : legacy.countries,
-    excludedCountries: hard.excludedCountries?.length ? hard.excludedCountries : legacy.excludedCountries,
+    requireAmericas: regions.some((item) => /americas?|north america|south america/.test(item)) || legacy.requireAmericas,
+    countries: legacy.countries.length ? legacy.countries : (hard.countries ?? []),
+    excludedCountries: legacy.excludedCountries.length ? legacy.excludedCountries : (hard.excludedCountries ?? []),
     excludeAsia: excludedRegions.some((item) => item === "asia") || legacy.excludeAsia,
     requireHousing: hard.housingAvailable ?? hard.housingGuaranteed ?? legacy.requireHousing,
     requireHousingGuaranteed: hard.housingGuaranteed ?? legacy.requireHousingGuaranteed,
@@ -2215,6 +2357,7 @@ function applyValidatedPlannerPlan(legacy: QueryConstraints, plan: QueryPlan | n
     major: hard.majors?.[0] ?? legacy.major,
     requireOfficialSource: hard.officialSourceRequired ?? legacy.requireOfficialSource,
     requireClearCost: hard.numericCostRequired ?? legacy.requireClearCost,
+    requestedFields,
   };
 }
 
@@ -2247,6 +2390,7 @@ async function v2Response(args: {
   cards: ResultCard[];
   detailedAnswer: string;
   planner: PlannerRun;
+  shortAnswerOverride?: string;
   extra?: Record<string, unknown>;
 }) {
   const apiKey = process.env.UPSTAGE_API_KEY;
@@ -2257,7 +2401,8 @@ async function v2Response(args: {
     ? await runSolarReasoner({ apiKey, model, packet })
     : { output: null, usedSolar: false, issues: ["missing_api_key"] };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
-  const shortAnswer = reasoner.output?.shortAnswer || presentation.shortAnswer;
+  const modelShortAnswer = reasoner.output?.shortAnswer || presentation.shortAnswer;
+  const shortAnswer = args.shortAnswerOverride ?? authoritativeShortAnswer(args.cards, modelShortAnswer);
 
   console.info("[chat-v2] pipeline", {
     planner: args.planner.usedSolar,
@@ -2306,6 +2451,35 @@ function deterministicDeadlineAnswer(cards: ResultCard[]) {
     "- 성균관대학교 내부 접수 일정과 상대교 일정은 다를 수 있습니다.",
     "- 실제 지원 전 아래 공식 출처에서 최신 일정을 확인해 주세요.",
   ].join("\n");
+}
+
+function deterministicRequestedFieldsAnswer(cards: ResultCard[], requestedFields: string[]) {
+  const labels: Record<string, string> = {
+    language_requirements: "어학 조건",
+    housing_options: "기숙사·주거",
+    estimated_costs: "비용",
+    application_deadlines: "지원 마감일",
+    quota_facts: "파견 정원",
+    course_restrictions: "수강 제한",
+    source_links: "공식 출처",
+    universities: "대학 기본 정보",
+  };
+  const lines = ["### 요청 항목 비교", ""];
+  for (const card of cards) {
+    lines.push(`#### ${card.university_name}`, "", "| 항목 | 확인된 내용 |", "|---|---|");
+    for (const field of requestedFields) {
+      const values = (card.fact_bundle ?? [])
+        .filter((fact) => fact.field_key === field || fact.table === field)
+        .map((fact) => cleanText(fact.value).replace(/\|/g, "/"))
+        .filter(Boolean)
+        .filter((value, index, items) => items.indexOf(value) === index)
+        .slice(0, 3);
+      lines.push(`| ${labels[field] ?? field} | ${values.length ? values.join(" / ") : "확인 필요"} |`);
+    }
+    lines.push("");
+  }
+  lines.push("### 확인사항", "", "- 확인 필요로 표시된 항목은 조건 충족으로 간주하지 않았습니다.", "- 숫자와 날짜는 아래 공식 근거에서 최신 값을 다시 확인해 주세요.");
+  return lines.join("\n");
 }
 
 function deterministicGeneralAnswer(cards: ResultCard[]) {
@@ -2362,6 +2536,39 @@ function outOfScopeResponse() {
   });
 }
 
+function clarificationResponse(question: string) {
+  const prompt = cleanText(question, "어느 대학의 어떤 정보를 확인할까요? 대학명이나 검색 조건을 알려주세요.");
+  return NextResponse.json({
+    answer: prompt,
+    shortAnswer: prompt,
+    detailedAnswer: ["### 질문을 조금만 구체화해 주세요", "", prompt].join("\n"),
+    cards: [],
+    sources: [],
+    matched: [],
+    partially_matched: [],
+    excluded_count: 0,
+    unknown_fields: [],
+    searchMode: "명확화 질문",
+  });
+}
+
+function needsTargetClarification(
+  intent: Intent,
+  exactTargetCount: number,
+  plannerTargetCount: number,
+  question: string,
+) {
+  const directFactIntent = new Set<Intent>(["deadline", "language", "housing", "quota", "source", "restriction"]);
+  if (!directFactIntent.has(intent) || exactTargetCount > 0 || plannerTargetCount > 0) return false;
+
+  const normalized = question.normalize("NFKC").toLowerCase();
+  const asksForCollection = /추천|비교|순위|가장|빠른|이른|낮은|높은|어디|어느\s*(?:대학|학교)|대학.{0,12}(?:찾|보여|알려|추천)|학교.{0,12}(?:찾|보여|알려|추천)|있는\s*(?:대학|학교)|가능한\s*(?:대학|학교)|몇\s*곳|top\s*\d+|recommend|compare|rank|which\s*(?:universities|schools)/i.test(normalized);
+  const hasScopedDeadlinePeriod = intent === "deadline"
+    && /\b20\d{2}\b/.test(normalized)
+    && /가을|봄|autumn|fall|spring/.test(normalized);
+  return !asksForCollection && !hasScopedDeadlinePeriod;
+}
+
 function unsupportedDataResponse(reason?: QueryConstraints["unsupportedReason"]) {
   if (reason === "cost_of_living_index") {
     return NextResponse.json({
@@ -2373,6 +2580,54 @@ function unsupportedDataResponse(reason?: QueryConstraints["unsupportedReason"])
     });
   }
   return outOfScopeResponse();
+}
+
+async function costOfLivingResponse(question: string) {
+  const mentioned = detectCountries(question).filter((country, index, items) => items.indexOf(country) === index);
+  const countries = mentioned.filter((country) => country !== "South Korea");
+  if (!countries.length) {
+    return clarificationResponse("비교할 국가를 알려주세요. 예: `영국과 핀란드 중 한국 대비 생활 물가가 더 낮은 나라는 어디야?`");
+  }
+  const snapshot = await loadCostOfLivingSnapshot();
+  const rows = countries.flatMap((country) => {
+    const item = costIndexCountry(country);
+    const index = costOfLivingIndex(country, snapshot.indices);
+    return item && index !== undefined ? [{ country, item, index }] : [];
+  }).sort((a, b) => a.index - b.index);
+  if (!rows.length) {
+    return NextResponse.json({
+      answer: "요청한 국가의 생활 물가 지수를 현재 공통 물가 데이터에서 확인하지 못했습니다.",
+      shortAnswer: "요청한 국가의 생활 물가 지수를 확인하지 못했습니다.",
+      detailedAnswer: "### 생활 물가 비교\n\n현재 공통 물가 데이터에 해당 국가 값이 없습니다.",
+      cards: [], sources: [], matched: [], partially_matched: [], excluded_count: 0, unknown_fields: countries,
+      searchMode: "공통 국가별 물가지수 조회 결과 없음",
+    });
+  }
+  const comparison = rows.length > 1
+    ? `비교한 국가 중 **${costIndexCountryLabel(rows[0].country)}**의 생활 물가 지수가 더 낮습니다.`
+    : `**${costIndexCountryLabel(rows[0].country)}**의 생활 물가 지수는 한국=100 기준 **${rows[0].index.toFixed(1)}**입니다.`;
+  const tableRows = rows.map(({ country, item, index }) => {
+    const difference = index - 100;
+    return `| ${costIndexCountryLabel(country)} | ${index.toFixed(1)} | 한국보다 ${Math.abs(difference).toFixed(1)}% ${difference >= 0 ? "높음" : "낮음"} | ${item.source} |`;
+  });
+  const detailedAnswer = [
+    "### 생활 물가 비교", "", comparison, "",
+    "| 국가 | 한국=100 지수 | 한국 대비 | 출처 |", "|---|---:|---|---|", ...tableRows, "",
+    `- OECD 기준월: ${snapshot.period}${snapshot.fallback ? " (저장된 최신 확인값)" : ""}`,
+    `- Numbeo 비OECD 국가 스냅샷: ${NUMBEO_SNAPSHOT_DATE}`,
+    "- 국가 평균 지표이므로 도시·주거 형태에 따른 실제 지출 차이는 별도로 확인해야 합니다.",
+  ].join("\n");
+  return NextResponse.json({
+    answer: comparison,
+    shortAnswer: comparison,
+    detailedAnswer,
+    cards: [], matched: [], partially_matched: [], excluded_count: 0, unknown_fields: [],
+    sources: [
+      { title: "OECD 월별 비교물가수준", url: "https://data-explorer.oecd.org/vis?df%5Bag%5D=OECD.SDD.TPS&df%5Bid%5D=DSD_PPP_M%40DF_PP_CPL_M", source_type: "OECD", is_official: true },
+      { title: "Numbeo 국가별 생활비 지수", url: "https://www.numbeo.com/cost-of-living/rankings_by_country.jsp", source_type: "Numbeo", is_official: false },
+    ],
+    searchMode: "웹 화면과 동일한 공통 국가별 물가지수 함수",
+  });
 }
 
 function removedCostFeatureResponse() {
@@ -2408,6 +2663,9 @@ async function handleChatRequest(request: Request) {
         .filter((value): value is string => typeof value === "string")
         .slice(0, 8)
     : [];
+  const sessionId = typeof (body as { sessionId?: unknown })?.sessionId === "string"
+    ? String((body as { sessionId: string }).sessionId).slice(0, 80)
+    : "unknown";
   if (!messages.length || messages.at(-1)?.role !== "user") {
     return NextResponse.json({ error: "질문을 입력해 주세요." }, { status: 400 });
   }
@@ -2415,12 +2673,18 @@ async function handleChatRequest(request: Request) {
   try {
     const universities = await getChatUniversities();
     const question = messages.at(-1)?.content ?? "";
+    const requestId = crypto.randomUUID().slice(0, 8);
+    if (isCostOfLivingIndexQuestion(question)) return costOfLivingResponse(question);
     // Product policy must win even when the active planner classifies the
     // question as out of scope or changes its intent.
     if (isRemovedCostRecommendation(question, 0)) {
       return removedCostFeatureResponse();
     }
-    const legacyConstraints = detectConstraints(question);
+    const detectedConstraints = detectConstraints(question);
+    const explicitFollowup = contextUniversityIds.length > 0 && isFollowupReference(question);
+    const legacyConstraints: QueryConstraints = explicitFollowup
+      ? { ...detectedConstraints, inScope: true }
+      : detectedConstraints;
     const apiKey = process.env.UPSTAGE_API_KEY;
     const planner: PlannerRun = apiKey && legacyConstraints.inScope
       ? await runSolarPlanner({
@@ -2434,24 +2698,67 @@ async function handleChatRequest(request: Request) {
       ? applyValidatedPlannerPlan(legacyConstraints, planner.validatedPlan)
       : legacyConstraints;
     console.info("[chat-v2] planner-plan", {
+      requestId,
+      sessionId,
       mode: process.env.SOLAR_PLANNER_MODE || "shadow",
       usedSolar: planner.usedSolar,
       issues: planner.issues,
       differences: plannerDifferences(legacyConstraints, planner.validatedPlan),
+      filters: {
+        europe: constraints.requireEurope,
+        asia: constraints.requireAsia,
+        americas: constraints.requireAmericas,
+        countries: constraints.countries,
+        excludedCountries: constraints.excludedCountries,
+      },
+      contextUniversityIds,
+      explicitFollowup,
     });
+    const earlyAliasTargets = universityNamesFromAliases(question)
+      .map((name) => universities.find((university) => university.university_name === name))
+      .filter((university): university is University => Boolean(university));
+    const earlyLegacyTargets = findTargetUniversities(universities, question);
+    const earlyKnownTargets = earlyAliasTargets.length ? earlyAliasTargets : earlyLegacyTargets;
+    const earlyUnknownInstitution = explicitUnknownInstitution(question, earlyKnownTargets);
+    if (earlyUnknownInstitution) return unknownInstitutionResponse(earlyUnknownInstitution, universities.length);
+
+    if (planner.validatedPlan?.clarificationNeeded) {
+      console.info("[chat-v2] clarification", { requestId, source: "solar_planner" });
+      return clarificationResponse(
+        planner.validatedPlan.clarificationQuestion || "어느 대학의 어떤 정보를 확인할까요? 대학명이나 검색 조건을 알려주세요.",
+      );
+    }
     if (!constraints.inScope) return unsupportedDataResponse(constraints.unsupportedReason);
 
     const intent = constraints.intent;
-    const exactTargets = findTargetUniversities(universities, question);
-    const unknownInstitution = explicitUnknownInstitution(question, exactTargets);
-    if (unknownInstitution) {
-      return NextResponse.json({
-        answer: `현재 등록된 53개 교환대학에서 **${unknownInstitution}**을(를) 찾지 못했습니다. 비슷한 이름의 다른 대학을 대신 추천하지 않았습니다.`,
-        cards: [],
-        sources: [],
-        searchMode: "등록 대학명 정확 일치 검사 결과 없음",
-      });
+    const aliasNames = universityNamesFromAliases(question);
+    const aliasTargets = aliasNames
+      .map((name) => universities.find((university) => university.university_name === name))
+      .filter((university): university is University => Boolean(university));
+    const plannerCanResolveTargets = planner.validatedPlan
+      && planner.validatedPlan.intent !== "university_recommendation"
+      && planner.validatedPlan.intent !== "out_of_scope";
+    const plannerTargets = plannerCanResolveTargets
+      ? planner.validatedPlan!.universityNames
+          .map((name) => universities.find((university) => university.university_name === name))
+          .filter((university): university is University => Boolean(university))
+      : [];
+    const legacyTargets = findTargetUniversities(universities, question);
+    const exactTargets = aliasTargets.length ? aliasTargets : plannerTargets.length ? plannerTargets : legacyTargets;
+    if (!explicitFollowup && needsTargetClarification(intent, exactTargets.length, planner.validatedPlan?.universityNames.length ?? 0, question)) {
+      console.info("[chat-v2] clarification", { requestId, source: "server_rule", intent });
+      const labels: Partial<Record<Intent, string>> = {
+        deadline: "어느 대학의 지원 마감일을 확인할까요? 대학명을 알려주세요.",
+        language: "어느 대학의 어학 조건을 확인할까요? 대학명을 알려주세요.",
+        housing: "어느 대학의 기숙사 정보를 확인할까요? 대학명을 알려주세요.",
+        quota: "어느 대학의 파견 정원을 확인할까요? 대학명을 알려주세요.",
+        source: "어느 대학의 공식 출처를 확인할까요? 대학명을 알려주세요.",
+        restriction: "어느 대학의 수강 제한을 확인할까요? 대학명을 알려주세요.",
+      };
+      return clarificationResponse(labels[intent] || "어느 대학의 어떤 정보를 확인할까요? 대학명을 알려주세요.");
     }
+    const unknownInstitution = explicitUnknownInstitution(question, exactTargets);
+    if (unknownInstitution) return unknownInstitutionResponse(unknownInstitution, universities.length);
     const explicitContextTargets = contextUniversityIds
       .map((id) => universities.find((university) => university.id === id))
       .filter((university): university is University => Boolean(university));
@@ -2459,13 +2766,35 @@ async function handleChatRequest(request: Request) {
       ? explicitContextTargets
       : previousContextUniversities(universities, messages.slice(0, -1));
     const ordinal = planner.validatedPlan?.followupReference.ordinal ?? followupOrdinal(question);
-    const followupTargets = isFollowupReference(question) || planner.validatedPlan?.followupReference.enabled
-      ? ordinal && previousTargets[ordinal - 1] ? [previousTargets[ordinal - 1]] : previousTargets
+    const comparisonLimit = followupComparisonLimit(question);
+    const hasExplicitGeography = constraints.requireEurope || constraints.requireAsia || constraints.requireAmericas || constraints.countries.length > 0;
+    const usePreviousResults = (explicitFollowup || planner.validatedPlan?.followupReference.enabled) && !hasExplicitGeography;
+    const followupTargets = usePreviousResults
+      ? ordinal && previousTargets[ordinal - 1]
+        ? [previousTargets[ordinal - 1]]
+        : comparisonLimit
+          ? previousTargets.slice(0, comparisonLimit)
+          : previousTargets
       : [];
-    const candidateUniversities = followupTargets.length ? followupTargets : universities;
+    const candidateUniversities = followupTargets.length
+      ? followupTargets
+      : exactTargets.length
+        ? exactTargets
+        : universities;
     const useClassification = !exactTargets.length && hasRecommendationConditions(constraints) && intent !== "cost" && intent !== "deadline";
     const classified = useClassification ? selectClassifiedCards(candidateUniversities, constraints, question) : undefined;
     const cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
+    console.info("[chat-v2] selection", {
+      requestId,
+      candidateScope: followupTargets.length ? "previous_results" : exactTargets.length ? "resolved_targets" : "all_universities",
+      targetResolution: aliasTargets.length ? "korean_alias" : plannerTargets.length ? "solar_planner" : legacyTargets.length ? "legacy_name_match" : "none",
+      resolvedTargetIds: exactTargets.map((university) => university.id),
+      candidateCount: candidateUniversities.length,
+      contextCandidateIds: followupTargets.map((university) => university.id),
+      finalCardIds: cards.map((card) => card.university_id),
+      matchedIds: classified?.matched.map((card) => card.university_id) ?? [],
+      partialIds: classified?.partiallyMatched.map((card) => card.university_id) ?? [],
+    });
     if (!cards.length) {
       return NextResponse.json({
         answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
@@ -2476,7 +2805,12 @@ async function handleChatRequest(request: Request) {
     }
 
     if (classified) {
-      const detailedAnswer = deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
+      const detailedAnswer = constraints.requestedFields.length > 1
+        ? [
+            deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched),
+            deterministicRequestedFieldsAnswer(cards, constraints.requestedFields),
+          ].join("\n\n")
+        : deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
       return v2Response({
         question,
         cards,
@@ -2488,6 +2822,36 @@ async function handleChatRequest(request: Request) {
           excluded_count: classified.excluded.length,
           searchMode: "Supabase 구조화 조건 판정(충족/부분 확인/미충족)",
         },
+      });
+    }
+
+    if (intent === "source") {
+      const sources = collectSources(cards);
+      const detailedAnswer = sources.length
+        ? [
+            "### 공식 출처",
+            "",
+            ...sources.map((source) => `- **${source.university_name || "대학"}**: [${source.title}](${source.url})`),
+          ].join("\n")
+        : ["### 공식 출처", "", "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다."].join("\n");
+      const shortAnswer = sources.length
+        ? sources.slice(0, 3).map((source) => `- [${source.university_name || source.title} 공식 출처](${source.url})`).join("\n")
+        : "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다.";
+      return v2Response({
+        question,
+        cards,
+        detailedAnswer,
+        shortAnswerOverride: shortAnswer,
+        planner,
+        extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
+      });
+    }
+
+    if (constraints.requestedFields.length > 1) {
+      const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
+      return v2Response({
+        question, cards, detailedAnswer, planner,
+        extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
       });
     }
 

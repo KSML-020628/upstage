@@ -382,6 +382,8 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
   const [detailResponse, setDetailResponse] = useState<ChatDetailResponse | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const requestSequenceRef = useRef(0);
 
   useEffect(() => {
     if (open) {
@@ -405,7 +407,12 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     }
   }, [loading]);
 
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
   function resetChat() {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    requestSequenceRef.current += 1;
     setMessages([WELCOME]);
     setInput("");
     setLoading(false);
@@ -419,6 +426,10 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     if (!content || loading) return;
 
     const nextMessages = [...messages, { role: "user" as const, content }];
+    const requestSequence = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    controllerRef.current?.abort();
+    controllerRef.current = controller;
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
@@ -432,6 +443,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+        signal: controller.signal,
         body: JSON.stringify({
           sessionId,
           contextUniversityIds,
@@ -457,6 +469,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
       let buffer = "";
       while (true) {
         const { value, done } = await reader.read();
+        if (requestSequence !== requestSequenceRef.current) return;
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -465,6 +478,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
           if (!line.trim()) continue;
           const event = JSON.parse(line) as { type?: string; stage?: string; message?: string; data?: ApiResult };
           if (event.type === "status") {
+            if (requestSequence !== requestSequenceRef.current) return;
             const stageIndex = ["planning", "searching", "validating", "reasoning"].indexOf(event.stage ?? "");
             if (stageIndex >= 0) setLoadingStage(stageIndex);
           }
@@ -485,6 +499,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
         createdAt: new Date(),
       };
 
+      if (requestSequence !== requestSequenceRef.current) return;
       setMessages((current) => [
         ...current,
         {
@@ -497,7 +512,9 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
           detailResponse: nextDetail,
         },
       ]);
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (requestSequence !== requestSequenceRef.current) return;
       setMessages((current) => [
         ...current,
         {
@@ -506,7 +523,10 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
         },
       ]);
     } finally {
-      setLoading(false);
+      if (requestSequence === requestSequenceRef.current) {
+        controllerRef.current = null;
+        setLoading(false);
+      }
     }
   }
 

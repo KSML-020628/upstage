@@ -41,3 +41,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# local audit artifacts
+/.chat-audit/
+/.media-audit/

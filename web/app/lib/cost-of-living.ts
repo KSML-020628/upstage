@@ -12,6 +12,15 @@ export type CostIndexCountry = {
 export const NUMBEO_SOUTH_KOREA_INDEX = 61.6;
 export const NUMBEO_SNAPSHOT_DATE = "2026-07-21";
 export const OECD_FALLBACK_PERIOD = "2026-05";
+const OECD_COUNTRIES = "KOR+AUT+BEL+CAN+DNK+FIN+FRA+DEU+ITA+GBR+USA";
+
+export type CostOfLivingSnapshot = {
+  source: "OECD";
+  period: string;
+  base: "Korea=100";
+  indices: Record<string, number>;
+  fallback: boolean;
+};
 
 export const costIndexCountries: CostIndexCountry[] = [
   { name: "South Korea", label: "대한민국", source: "OECD", oecdCode: "KOR", fallbackIndex: 100 },
@@ -70,4 +79,39 @@ export function costOfLivingIndex(country: string, oecdIndices: Record<string, n
   if (item.source === "OECD") return item.oecdCode ? (oecdIndices[item.oecdCode] ?? item.fallbackIndex) : item.fallbackIndex;
   if (item.numbeoIndex === undefined) return undefined;
   return (item.numbeoIndex / NUMBEO_SOUTH_KOREA_INDEX) * 100;
+}
+
+function fallbackSnapshot(): CostOfLivingSnapshot {
+  return {
+    source: "OECD",
+    period: OECD_FALLBACK_PERIOD,
+    base: "Korea=100",
+    indices: Object.fromEntries(costIndexCountries
+      .filter((country) => country.source === "OECD" && country.oecdCode && country.fallbackIndex !== undefined)
+      .map((country) => [country.oecdCode as string, country.fallbackIndex as number])),
+    fallback: true,
+  };
+}
+
+export async function loadCostOfLivingSnapshot(): Promise<CostOfLivingSnapshot> {
+  const currentYear = new Date().getUTCFullYear();
+  const startPeriod = `${currentYear - 1}-01`;
+  const url = `https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_PPP_M@DF_PP_CPL_M,1.0/${OECD_COUNTRIES}.M.CPL.IX.KRW.KOR?startPeriod=${startPeriod}&dimensionAtObservation=AllDimensions`;
+  try {
+    const response = await fetch(url, { headers: { Accept: "text/csv" }, next: { revalidate: 86400 } });
+    if (!response.ok) return fallbackSnapshot();
+    const lines = (await response.text()).trim().split(/\r?\n/);
+    const headers = lines.shift()?.split(",") ?? [];
+    const rows = lines.map((line) => Object.fromEntries(headers.map((header, index) => [header, line.split(",")[index]])));
+    const period = rows.map((row) => String(row.TIME_PERIOD ?? "")).sort().at(-1);
+    if (!period) return fallbackSnapshot();
+    const indices = Object.fromEntries(rows
+      .filter((row) => row.TIME_PERIOD === period && row.REF_AREA && Number.isFinite(Number(row.OBS_VALUE)))
+      .map((row) => [String(row.REF_AREA), Number(row.OBS_VALUE)]));
+    return Object.keys(indices).length >= 11
+      ? { source: "OECD", period, base: "Korea=100", indices, fallback: false }
+      : fallbackSnapshot();
+  } catch {
+    return fallbackSnapshot();
+  }
 }

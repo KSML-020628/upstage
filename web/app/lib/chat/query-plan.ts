@@ -79,6 +79,31 @@ const semesters = (value: unknown) => strings(value).flatMap((item) => {
   return [];
 }).filter((item, index, items) => items.indexOf(item) === index);
 
+const groundedRegions = (question: string, value: unknown, issues: string[], prefix: string) => {
+  const q = question.normalize("NFKC").toLowerCase();
+  return strings(value).filter((item) => {
+    const region = item.normalize("NFKC").toLowerCase();
+    const grounded = region === "europe"
+      ? /유럽|europe/.test(q)
+      : region === "asia"
+        ? /아시아|asia/.test(q)
+        : /americas?|north america|south america/.test(region)
+          ? /미주|북미|남미|아메리카|americas?|north america|south america/.test(q)
+          : q.includes(region);
+    if (!grounded) issues.push(`${prefix}_not_grounded:${item}`);
+    return grounded;
+  });
+};
+
+const groundedCountries = (question: string, value: unknown, issues: string[], prefix: string) => {
+  const q = question.normalize("NFKC").toLowerCase();
+  return strings(value).filter((item) => {
+    const grounded = q.includes(item.normalize("NFKC").toLowerCase());
+    if (!grounded) issues.push(`${prefix}_not_grounded:${item}`);
+    return grounded;
+  });
+};
+
 export function validateQueryPlan(question: string, value: unknown, knownUniversityNames: string[]): { plan: QueryPlan | null; issues: string[] } {
   const issues: string[] = [];
   if (!value || typeof value !== "object" || Array.isArray(value)) return { plan: null, issues: ["planner_output_not_object"] };
@@ -128,10 +153,10 @@ export function validateQueryPlan(question: string, value: unknown, knownUnivers
       intent,
       universityNames,
       hardFilters: {
-        regions: strings(rawHard.regions),
-        countries: strings(rawHard.countries),
-        excludedRegions: strings(rawHard.excludedRegions),
-        excludedCountries: strings(rawHard.excludedCountries),
+        regions: groundedRegions(question, rawHard.regions, issues, "region"),
+        countries: groundedCountries(question, rawHard.countries, issues, "country"),
+        excludedRegions: groundedRegions(question, rawHard.excludedRegions, issues, "excluded_region"),
+        excludedCountries: groundedCountries(question, rawHard.excludedCountries, issues, "excluded_country"),
         ...cleanNumbers,
         housingAvailable: bool(rawHard.housingAvailable),
         housingGuaranteed: bool(rawHard.housingGuaranteed),

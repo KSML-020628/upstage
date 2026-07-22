@@ -90,7 +90,7 @@ export const universityLogoImages: Record<string, string> = {
   "Ruhr University of Bochum": "/images/university-logos/Ruhr%20University%20of%20Bochum.png",
   "Singapore University of Technology and Design (SUTD)": "/images/university-logos/Singapore%20University%20of%20Technology%20and%20Design%20(SUTD).png",
   "SKEMA Business School": "/images/university-logos/SKEMA%20Business%20School.png",
-  "Soka University": "/images/university-logos/Soka%20University.png",
+  "Soka University": "/images/university-logos/Soka%20University.svg",
   "Toulouse Business School": "/images/university-logos/Toulouse%20Business%20School.png",
   "UNICAMP (University of Campinas)": "/images/university-logos/UNICAMP%20(University%20of%20Campinas).png",
   "Universidad San Francisco de Quito": "/images/university-logos/Universidad%20San%20Francisco%20de%20Quito.png",
