@@ -130,9 +130,6 @@ const detailCardCss = `
 .research-item-header h3{min-width:0;margin:0;color:#10243f;font-size:17px;line-height:1.4;letter-spacing:0}
 .research-item-bullets{margin:17px 0 20px;padding-left:18px;display:grid;gap:8px;color:#314158;font-size:13px;line-height:1.65}
 .research-item-bullets li::marker{color:#1b55d5}
-.research-item-overflow{margin:-10px 0 20px}
-.research-item-overflow summary{cursor:pointer;color:#1b55d5;font-size:12px;font-weight:800}
-.research-item-overflow .research-item-bullets{margin:10px 0 0}
 .research-item-summary{margin:17px 0 14px;padding:14px 16px;border-left:3px solid #1b55d5;background:#f4f7fb;color:#263951;font-size:13px;line-height:1.7}
 .research-review-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 18px}
 .research-review-groups section,.research-structured-items section{min-width:0;padding:14px;border:1px solid #e1e8f1;border-radius:7px;background:#fbfcfe}
@@ -347,7 +344,7 @@ export default async function UniversityDetail({ params }: { params: Promise<{ i
               {label}
             </a>
           ))}
-          <a className="active-like" href="#profile-sections">22개 조사 항목</a>
+          <a className="active-like" href="#profile-sections">21개 조사 항목</a>
           <a href="#sources">출처</a>
         </aside>
 
@@ -429,14 +426,12 @@ export default async function UniversityDetail({ params }: { params: Promise<{ i
           <article id="profile-sections" className="info-section">
             <div className="research-intro">
               <span>08</span>
-              <h2>22개 조사 항목</h2>
-              <em>22건</em>
+              <h2>21개 조사 항목</h2>
+              <em>21건</em>
             </div>
             <ResearchItemGrid
               sections={profileSections}
               fallbackSections={structuredFallbackSections}
-              unknowns={university.unknowns}
-              universityName={university.university_name}
               sourceLinks={program?.source_links}
             />
           </article>
