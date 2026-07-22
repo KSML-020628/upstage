@@ -58,9 +58,20 @@ export function normalizeUniversityAlias(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase().replace(/[\s._'’()\-·]/g, "");
 }
 
+// Conversational Korean references almost always drop the trailing "대학교"/"대"
+// suffix rather than add characters in the middle (e.g. "브리스톨 지원할 때" for
+// "브리스톨대학교"). Matching only the full alias with its suffix misses that
+// whole class of phrasing, so every alias is also checked with the suffix
+// stripped, as long as the remaining stem is long enough to stay specific.
+function aliasVariants(alias: string): string[] {
+  const normalized = normalizeUniversityAlias(alias);
+  const stem = normalized.replace(/(대학교|대)$/, "");
+  return stem.length >= 2 && stem !== normalized ? [normalized, stem] : [normalized];
+}
+
 export function universityNamesFromAliases(question: string) {
   const normalizedQuestion = normalizeUniversityAlias(question);
   return Object.entries(UNIVERSITY_ALIASES)
-    .filter(([, aliases]) => aliases.some((alias) => normalizedQuestion.includes(normalizeUniversityAlias(alias))))
+    .filter(([, aliases]) => aliases.some((alias) => aliasVariants(alias).some((variant) => normalizedQuestion.includes(variant))))
     .map(([name]) => name);
 }

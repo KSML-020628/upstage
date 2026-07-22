@@ -180,6 +180,44 @@ function sectionsFromFacts(profile: Record<string, unknown> | undefined, facts: 
     .filter((item) => item.summary);
 }
 
+// A source can get re-processed and re-translated into the same fact table,
+// leaving the same nomination/application deadline stored twice: once with
+// English field values, once with the Korean translation. Both rows carry the
+// same (semester, deadline type, date) underneath, so collapse them to one
+// row per fact instead of listing the same deadline twice downstream.
+function normalizedSemesterBucket(value: unknown): string {
+  const text = String(value ?? "").toLowerCase();
+  if (/autumn|fall|가을/.test(text)) return "autumn";
+  if (/spring|봄/.test(text)) return "spring";
+  return "other";
+}
+
+function normalizedDeadlineTypeBucket(value: unknown): string {
+  const text = String(value ?? "").toLowerCase();
+  if (/nomination|지명|노미네이션/.test(text)) return "nomination";
+  if (/application|지원|신청/.test(text)) return "application";
+  return "other";
+}
+
+function dedupeDeadlineRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const groups = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const semester = normalizedSemesterBucket(row.semester);
+    const type = normalizedDeadlineTypeBucket(`${row.deadline_type ?? ""} ${row.deadline_text ?? ""}`);
+    const date = String(row.deadline_date ?? row.date ?? "");
+    const key = `${semester}|${type}|${date}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, row);
+      continue;
+    }
+    const existingIsKorean = /[가-힣]/.test(String(existing.semester ?? ""));
+    const currentIsKorean = /[가-힣]/.test(String(row.semester ?? ""));
+    if (currentIsKorean && !existingIsKorean) groups.set(key, row);
+  }
+  return [...groups.values()];
+}
+
 function exchangeProgram(row: SamuelUniversityRow, profile: Record<string, unknown> | undefined, facts: Map<string, CanonicalFactRow>): ExchangeProgram {
   const program = asRecord(profile?.program);
   const source_links = sourceLinks(profile, facts);
@@ -191,7 +229,9 @@ function exchangeProgram(row: SamuelUniversityRow, profile: Record<string, unkno
     exchange_type: cleanText(program?.exchange_type, "Exchange"),
     application_process: cleanText(program?.application_process, facts.get("section_07_summary")?.value_text ?? ""),
     course_registration_notes: cleanText(program?.course_registration_notes, facts.get("section_11_summary")?.value_text ?? ""),
-    application_deadlines: asArray(profile?.application_deadlines).length ? asArray(profile?.application_deadlines) : asArray(facts.get("application_deadlines")?.value_json),
+    application_deadlines: dedupeDeadlineRows(
+      asArray(profile?.application_deadlines).length ? asArray(profile?.application_deadlines) : asArray(facts.get("application_deadlines")?.value_json),
+    ),
     language_requirements: asArray(profile?.language_requirements).length ? asArray(profile?.language_requirements) : asArray(facts.get("language_requirements")?.value_json),
     academic_periods: asArray(profile?.academic_periods).length ? asArray(profile?.academic_periods) : asArray(facts.get("academic_periods")?.value_json),
     housing_options: asArray(profile?.housing_options).length ? asArray(profile?.housing_options) : asArray(facts.get("housing_options")?.value_json),

@@ -14,7 +14,6 @@ const sectionLabels: Record<string, string> = {
   language_requirements: "어학 성적",
   academic_periods: "학사 일정",
   housing_options: "기숙사",
-  estimated_costs: "예상 비용",
   required_documents: "준비 서류",
 };
 
@@ -306,7 +305,6 @@ export default async function UniversityDetail({ params }: { params: Promise<{ i
     } : null,
     rowsToSection("12", "학과·전공·제한 과목", "course_restrictions", (program?.course_restrictions ?? []) as RowValue[]),
     rowsToSection("14", "기숙사·숙소", "housing_options", (program?.housing_options ?? []) as RowValue[]),
-    rowsToSection("15", "예상 비용", "estimated_costs", (program?.estimated_costs ?? []) as RowValue[]),
     {
       section_number: "20",
       section_title: "교환학생 후기",

@@ -2298,8 +2298,7 @@ function authoritativeShortAnswer(cards: ResultCard[], fallback: string) {
   }
 
   if (partial.length) {
-    lines.push("", `일부 조건을 추가로 확인해야 하는 후보는 **${partial.length}곳**입니다.`);
-    lines.push(...partial.map((card) => `- ${card.university_name}`));
+    lines.push("", `추가로 **${partial.length}곳**은 일부 조건 확인이 필요합니다. 상세 결과에서 확인해 주세요.`);
   }
 
   return lines.join("\n");
