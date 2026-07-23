@@ -149,30 +149,6 @@ export function selectCards(universities: University[], constraints: QueryConstr
   return ranked.map((candidate) => makeCard(candidate, constraints.intent, constraints.requestedFields));
 }
 
-export function hasRecommendationConditions(constraints: QueryConstraints) {
-  return Boolean(
-      constraints.requireEurope ||
-      constraints.requireAsia ||
-      constraints.requireAmericas ||
-      constraints.countries.length ||
-      constraints.excludedCountries.length ||
-      constraints.excludeAsia ||
-      constraints.requireHousing ||
-      constraints.requireHousingGuaranteed ||
-      constraints.deadlineSemester !== undefined ||
-      constraints.languageScore !== undefined ||
-      constraints.gpa !== undefined ||
-      constraints.major ||
-      constraints.quotaMin !== undefined ||
-      constraints.quotaMode !== undefined ||
-      constraints.requireGpaKnown ||
-      constraints.sortGpaLowest ||
-      constraints.requireQuotaKnown ||
-      constraints.requireHousingMissing ||
-      constraints.requireOfficialSource,
-  );
-}
-
 export function selectClassifiedCards(universities: University[], constraints: QueryConstraints, question: string) {
   const evaluated = universities.map((university) => evaluateUniversity(university, constraints));
   const rank = (items: EvaluatedUniversity[], limit: number) =>

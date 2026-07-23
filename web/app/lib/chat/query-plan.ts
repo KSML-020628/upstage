@@ -67,7 +67,16 @@ const FIELDS = new Set([
   "application_deadlines", "quota_facts", "course_restrictions", "source_links",
 ]);
 
-const numberTokens = (text: string) => (text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+// ISO/slash dates (2026-05-01, 2026/05/01) embed digits that are NOT
+// free-standing counts or scores. Without stripping them first, a question
+// like "2026-05-01 이후 마감" would "ground" any Planner-guessed limit/score
+// that happens to numerically equal 2026, 5, or 1 purely by coincidence
+// with the date's own month/day components -- this is exactly how a
+// schema-clamped, otherwise-ungrounded `limit` guess of 5 slipped past the
+// limit_not_grounded check once Solar started landing on 5 consistently
+// (see docs/decisions.md, "q4 20-run diagnostic" follow-up).
+const stripDateLikeSequences = (text: string) => text.replace(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/g, " ");
+const numberTokens = (text: string) => (stripDateLikeSequences(text).match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
 const hasNumber = (question: string, value: number) => numberTokens(question).some((item) => Math.abs(item - value) < 0.0001);
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 12) : [];
 const bool = (value: unknown) => typeof value === "boolean" ? value : undefined;
@@ -282,7 +291,15 @@ const QUERY_PLAN_JSON_SCHEMA = {
       additionalProperties: false,
     },
     requestedFields: { type: "array", items: { type: "string", enum: Array.from(FIELDS) } },
-    limit: { type: "integer" },
+    // No bounds were declared here before, so Solar's own out-of-range
+    // guesses (observed live: 0 and 10) were fully schema-valid -- not
+    // actually "outside the schema", just outside what validateQueryPlan's
+    // clamp assumed. Declaring the real bounds directly is a second,
+    // independent defense on top of the question-text grounding check in
+    // validateQueryPlan (which is still the primary guard, since a
+    // grounded-but-out-of-range limit like 8 should still be clamped, not
+    // just rejected by the schema).
+    limit: { type: "integer", minimum: 1, maximum: 5 },
     followupReference: {
       type: "object",
       properties: {

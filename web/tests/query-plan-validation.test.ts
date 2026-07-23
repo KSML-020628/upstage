@@ -46,6 +46,24 @@ describe("validateQueryPlan: limit grounding", () => {
     assert.equal(plan?.limit, 3);
     assert.ok(!issues.includes("limit_not_grounded"));
   });
+
+  it("does not let a date's own digits (2026-05-01) ground an unrelated limit of 5", () => {
+    // Regression: once the schema declared limit's bounds as 1-5, Solar
+    // started landing on 5 consistently for q4 instead of its earlier
+    // out-of-range guesses (0, 10) -- and "05" inside "2026-05-01" is
+    // numerically 5, so the OLD (pre-fix) grounding check treated that
+    // date fragment as if the user had asked for "5개", re-introducing the
+    // exact nondeterminism this whole fix exists to remove.
+    const { plan, issues } = validateQueryPlan(Q4, rawPlan({ limit: 5 }), []);
+    assert.equal(plan?.limit, 4);
+    assert.ok(issues.includes("limit_not_grounded"));
+  });
+
+  it("still grounds a real explicit count even when the question also contains a date", () => {
+    const { plan, issues } = validateQueryPlan("2026-05-01 이후 마감인 대학 3개 추천해줘", rawPlan({ limit: 3 }), []);
+    assert.equal(plan?.limit, 3);
+    assert.ok(!issues.includes("limit_not_grounded"));
+  });
 });
 
 describe("validateQueryPlan: region polarity", () => {

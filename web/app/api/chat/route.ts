@@ -31,7 +31,6 @@ import {
   applyValidatedPlannerPlan,
   followupOrdinal,
   plannerDifferences,
-  plannerHasSearchConditions,
   resolvePlannerMode,
   resolveReasoningEffort,
 } from "../../lib/chat/planner-integration";
@@ -49,13 +48,13 @@ import {
   explicitUnknownInstitution,
   findTargetUniversities,
   followupComparisonLimit,
-  hasRecommendationConditions,
   isFollowupReference,
   previousContextUniversities,
   selectCards,
   selectClassifiedCards,
   unknownInstitutionResponse,
 } from "../../lib/chat/selection";
+import { hasActionableSearchConditions, hasRecommendationConditions } from "../../lib/chat/search-conditions";
 import { getChatUniversities, refreshCurrencyRatesInBackground } from "../../lib/chat/supabase-facts";
 import type { ChatMessage, QueryConstraints, ResultCard } from "../../lib/chat/types";
 
@@ -335,7 +334,14 @@ async function handleChatRequest(request: Request) {
     const earlyUnknownInstitution = explicitUnknownInstitution(question, exactTargets);
     if (earlyUnknownInstitution) return unknownInstitutionResponse(earlyUnknownInstitution, universities.length);
 
-    if (planner.validatedPlan?.clarificationNeeded) {
+    // Solar's own clarificationNeeded self-flag is unreliable in exactly the
+    // case that matters most: it never once resolved a Korean nickname like
+    // "셰필드" into its own universityNames (always empty), so it sometimes
+    // reports "I don't know which university" even on a request our OWN
+    // alias/legacy matching had already resolved correctly (measured 6/10
+    // identical calls -- see docs/decisions.md). Only honor Solar's self-
+    // reported clarification when we don't already have a resolved target.
+    if (planner.validatedPlan?.clarificationNeeded && !exactTargets.length) {
       console.info("[chat-v2] clarification", { requestId, source: "solar_planner" });
       return clarificationResponse(
         planner.validatedPlan.clarificationQuestion || "어느 대학의 어떤 정보를 확인할까요? 대학명이나 검색 조건을 알려주세요.",
@@ -349,7 +355,7 @@ async function handleChatRequest(request: Request) {
       exactTargets.length,
       planner.validatedPlan?.universityNames.length ?? 0,
       question,
-      plannerHasSearchConditions(planner.validatedPlan),
+      hasActionableSearchConditions(constraints),
     );
     if (targetClarification.overriddenByPlanner) {
       console.info("[chat-v2] target-clarification overridden by planner", { requestId, intent, question });

@@ -6,7 +6,7 @@ import {
   costOfLivingIndex,
   loadCostOfLivingSnapshot,
 } from "../cost-of-living";
-import { hasRecommendationConditions } from "./selection";
+import { hasRecommendationConditions } from "./search-conditions";
 import type { Intent, QueryConstraints } from "./types";
 import { cleanText, detectCountries } from "./utils";
 
@@ -119,12 +119,17 @@ export function needsTargetClarification(
     && /가을|봄|autumn|fall|spring/.test(normalized);
   const regexSaysNeedsClarification = !asksForCollection && !hasScopedDeadlinePeriod;
 
-  // The Solar planner returning a plan with a real search condition (a
-  // region/country/language/GPA/housing/quota/major filter) is authoritative
-  // evidence this is a conditional search query. The regex heuristic above is
-  // a fallback for when the planner is unavailable or returned nothing
-  // usable -- not a second opinion that can override a planner result that
-  // does exist. See docs/decisions.md.
+  // The final merged constraints (legacy regex + whatever the Planner
+  // contributed) already carrying a real search condition (a region/country/
+  // language/GPA/housing/quota/major/deadline-date filter) is authoritative
+  // evidence this is a conditional search query -- see
+  // hasActionableSearchConditions in selection.ts. Checking the FINAL
+  // constraints instead of the Planner's own hardFilters directly matters:
+  // Solar sometimes returns a completely empty plan for a run even though
+  // the legacy regex side already resolved a real condition (see
+  // docs/decisions.md's q4 diagnostic). The regex heuristic below is a
+  // fallback for when neither side found anything -- not a second opinion
+  // that can override an actionable condition that does exist.
   if (plannerHasConditions) {
     return { needsClarification: false, overriddenByPlanner: regexSaysNeedsClarification };
   }
