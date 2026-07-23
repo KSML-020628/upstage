@@ -2,6 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import Image from "next/image";
 import { ChatDetailPanel, type ChatDetailResponse } from "./ChatDetailPanel";
 
 export type ChatSource = {
@@ -540,7 +541,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     <section className="chatbot-panel" role={isPanel ? "region" : "dialog"} aria-label="교환대학 AI 도우미">
       <header className="chatbot-header">
         <div className="chatbot-avatar">
-          <img src="/images/upstage-color.png" alt="Upstage" />
+          <Image src="/images/upstage-color.png" alt="Upstage" width={38} height={38} />
         </div>
         <div>
           <strong>Exchange Atlas AI</strong>
@@ -641,7 +642,7 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
           aria-label={open ? "챗봇 닫기" : "교환대학 AI 도우미 열기"}
         >
           <span>
-            {open ? "×" : <img src="/images/upstage-color.png" alt="Upstage" />}
+            {open ? "×" : <Image src="/images/upstage-color.png" alt="Upstage" width={40} height={40} />}
           </span>
           {!open && <b>대학 정보 물어보기</b>}
         </button>
