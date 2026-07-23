@@ -1,6 +1,6 @@
-import { getUniversities } from "../supabase";
+import { getUniversities } from "../supabase.ts";
 import type { ExchangeProgram, University } from "../types";
-import { cleanText } from "./utils";
+import { cleanText } from "./utils.ts";
 import type { FactTableBundle } from "./types";
 
 // Seed values only -- refreshCurrencyRatesInBackground() below keeps these
@@ -49,16 +49,16 @@ export function refreshCurrencyRatesInBackground() {
   }
 }
 
-function supabaseServerRestBase() {
+export function supabaseServerRestBase() {
   const raw = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
   return raw.endsWith("/rest/v1") ? raw : `${raw}/rest/v1`;
 }
 
-function supabaseServerKey() {
+export function supabaseServerKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_KEY;
 }
 
-async function supabaseServerRequest<T>(path: string): Promise<T> {
+export async function supabaseServerRequest<T>(path: string): Promise<T> {
   const key = supabaseServerKey();
   const base = supabaseServerRestBase();
   if (!key || !base || base === "/rest/v1") throw new Error("Supabase server environment is not configured");
@@ -76,7 +76,7 @@ async function supabaseServerRequest<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function requestFactRows(table: string, ids: string[], select: string) {
+export async function requestFactRows(table: string, ids: string[], select: string) {
   if (!ids.length) return [] as Record<string, unknown>[];
   const chunks: Record<string, unknown>[] = [];
   for (let index = 0; index < ids.length; index += 80) {
@@ -87,7 +87,7 @@ async function requestFactRows(table: string, ids: string[], select: string) {
   return chunks;
 }
 
-async function requestOptionalFactRows(table: string, ids: string[], select: string) {
+export async function requestOptionalFactRows(table: string, ids: string[], select: string) {
   try {
     return await requestFactRows(table, ids, select);
   } catch (error) {
@@ -111,7 +111,7 @@ function factRowSourceTitle(row: Record<string, unknown>, fallback: string) {
   return type === fallback ? fallback : type;
 }
 
-function normalizeCostFact(row: Record<string, unknown>) {
+export function normalizeCostFact(row: Record<string, unknown>) {
   return {
     fact_id: row.id,
     cost_type: row.cost_type,
@@ -132,7 +132,7 @@ function normalizeCostFact(row: Record<string, unknown>) {
   };
 }
 
-function normalizeHousingFact(row: Record<string, unknown>) {
+export function normalizeHousingFact(row: Record<string, unknown>) {
   return {
     fact_id: row.id,
     housing_available: row.housing_available,
@@ -157,7 +157,7 @@ function normalizeHousingFact(row: Record<string, unknown>) {
   };
 }
 
-function normalizeLanguageFact(row: Record<string, unknown>) {
+export function normalizeLanguageFact(row: Record<string, unknown>) {
   return {
     fact_id: row.id,
     language: row.language,
@@ -179,7 +179,7 @@ function normalizeLanguageFact(row: Record<string, unknown>) {
   };
 }
 
-function normalizeDeadlineFact(row: Record<string, unknown>) {
+export function normalizeDeadlineFact(row: Record<string, unknown>) {
   return {
     fact_id: row.id,
     semester: row.semester,
@@ -197,7 +197,7 @@ function normalizeDeadlineFact(row: Record<string, unknown>) {
   };
 }
 
-function normalizeQuotaFact(row: Record<string, unknown>) {
+export function normalizeQuotaFact(row: Record<string, unknown>) {
   const valueJson = row.value_json && typeof row.value_json === "object" ? (row.value_json as Record<string, unknown>) : {};
   return {
     fact_id: row.id,

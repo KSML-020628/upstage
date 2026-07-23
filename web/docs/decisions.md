@@ -101,6 +101,58 @@ decision, not a "just defer to planner" fix):**
   change in those specific paths. Not fixed this pass -- flagged as a
   candidate follow-up, lower observed impact than the two gates above.
 
+## Phase 3A: Targeted Query Builder runs shadow-only, real path untouched
+
+**Principle**: a Planner-first Targeted Query Builder (`app/lib/chat/
+targeted-query.ts`) runs ALONGSIDE the existing full-load pipeline, purely
+for comparison logging (`[chat-v2] targeted-query-shadow`) and latency
+measurement -- its result is never used for the actual response. This is
+enforced by isolating the whole shadow block in its own try/catch inside
+`app/api/chat/route.ts` (a shadow failure only logs, never affects the
+response) and by never assigning its output to `cards`/`shortAnswer`.
+
+**Why this phase exists**: to validate, with real measurements against the
+live DB, whether a lightweight `UniversityCatalogItem` catalog
+(`university-catalog.ts`, id/name/aliases/country/region only -- no facts)
+plus an allowlist-based per-field query builder can support the same
+answers the current "load everything" pipeline (`getChatUniversities()`)
+produces, before committing to a real primary-path migration.
+
+**What the 2026-07-24 shadow run against 12 real query types found**:
+- `resolveTargetUniversityIds` (targeted-query.ts) can only narrow the
+  university-ID set two ways: an exact `universityNames` match, or a
+  region/country filter using the catalog's own thin fields. It has **no**
+  equivalent of the legacy pipeline's actual constraint matching (language
+  score comparison, GPA conversion, quota threshold, topN ranking) --
+  neither does anything in Phase 3A attempt to build one, since the
+  instructions scope this phase to DB-access parity, not decision-logic
+  parity. For any recommendation-style question with no named university
+  and no region/country filter (language-score-only, housing-guarantee-only,
+  major-only), the fallback is "the whole catalog" -- far broader than the
+  handful of cards the legacy path actually settles on. This is the single
+  dominant cause of the `mismatch` parityStatus results in the Phase 3A
+  report (10 of 12 dedicated test questions): not a bug in the query
+  builder, but a real, expected scope boundary of what a catalog-only
+  targeting strategy can do without also re-implementing selection logic
+  against the fetched facts.
+- `course_restrictions` and `source_links` have no dedicated fact table in
+  today's schema -- both are only ever populated from the full
+  `ui_profile_json` blob (see the Phase 3A pipeline investigation). The
+  allowlist reports these as `no_dedicated_fact_table:<field>` rather than
+  fetching the blob (which would defeat "targeted"); a real primary-path
+  migration would need either a schema change or an accepted exception for
+  these two fields.
+- Row-count and latency comparisons in the shadow log are NOT strictly
+  apples-to-apples yet: `legacyFetchedRowCount` counts only the rows that
+  ended up in the final answer cards' `fact_bundle` (a post-selection
+  count), while `targetedFetchedRowCount` counts raw DB rows fetched
+  pre-selection -- comparing them directly overstates how much "more" the
+  targeted query fetches. `legacyQueryMs` measures only `getChatUniversities
+  ()`'s own completion time, which is frequently a Next.js fetch-cache hit
+  (`revalidate: 300`) within a fast test run, not a representative cold-load
+  time. Any Phase 3B latency claim needs its own, deliberately cold-cache
+  measurement of both paths.
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows

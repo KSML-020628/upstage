@@ -246,7 +246,12 @@ export function detectConstraints(question: string): QueryConstraints {
     requireEurope: /유럽|europe|european/.test(text) || /유럽|europe|european/.test(rawQuestion),
     inScope: isExchangeQuestion(question) && !costOfLivingIndexQuestion,
     requireHousing: /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(text) || /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(rawQuestion),
-    requireHousingGuaranteed: /기숙사?\s*(?:배정\s*)?(?:보장|확약)|housing[^\n]{0,24}guaranteed|guaranteed[^\n]{0,24}(?:housing|accommodation)/i.test(rawQuestion),
+    // "배정\s*보장" required the two words to be immediately adjacent, so a
+    // natural phrasing like "배정이 보장" (with the "이" particle in between)
+    // never matched -- found via Phase 3A's planner-grounding tests, which
+    // reuse this exact pattern; "{0,3}" tolerates a short particle/gap
+    // without becoming loose enough to match unrelated text between them.
+    requireHousingGuaranteed: /기숙사?\s*(?:배정[^\n]{0,3}\s*)?(?:보장|확약)|housing[^\n]{0,24}guaranteed|guaranteed[^\n]{0,24}(?:housing|accommodation)/i.test(rawQuestion),
     requireAll: /모든 조건|전부|only|만 추천|만 골라|제외|exclude|명확|공식 출처|숫자 비교/.test(text) || /모든 조건|전부|only|만 추천|만 골라|제외|exclude|명확|공식 출처|숫자 비교/.test(rawQuestion),
     requireOfficialSource: /공식|official/.test(text) || /공식|official/.test(rawQuestion),
     requireClearCost: /명확|숫자 비교|비용 정보가 부족|공식 출처|출처가 있는|정확/.test(text) || /명확|숫자 비교|비용 정보가 부족|공식 출처|출처가 있는|정확/.test(rawQuestion),

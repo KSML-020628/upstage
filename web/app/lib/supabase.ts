@@ -1,4 +1,4 @@
-import { fallbackUniversities } from "./fallback-data";
+import { fallbackUniversities } from "./fallback-data.ts";
 import type { ExchangeProgram, ProfileSection, University } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;

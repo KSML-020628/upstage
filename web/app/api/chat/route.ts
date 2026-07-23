@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import type { University } from "../../lib/types";
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
-import { runSolarPlanner, type PlannerRun } from "../../lib/chat/query-plan";
+import { runSolarPlanner, type PlannerRun, type QueryPlan } from "../../lib/chat/query-plan";
+import { getUniversityCatalog } from "../../lib/chat/university-catalog";
+import { groundPlannerFields } from "../../lib/chat/planner-grounding";
+import { queryRelevantUniversityFacts } from "../../lib/chat/targeted-query";
+import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -224,7 +228,9 @@ async function handleChatRequest(request: Request) {
   if (isPromptInjectionRequest(question)) return safePromptInjectionResponse();
 
   try {
+    const legacyQueryStart = Date.now();
     const { universities, factTablesDegraded } = await getChatUniversities();
+    const legacyQueryMs = Date.now() - legacyQueryStart;
     const requestId = crypto.randomUUID().slice(0, 8);
     if (factTablesDegraded) {
       console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
@@ -444,6 +450,57 @@ async function handleChatRequest(request: Request) {
     // conditional searches, and follow-ups (which often revisit/narrow a
     // multi-card set) are exactly the cases with something worth explaining.
     const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
+
+    // Phase 3A shadow run (see docs/decisions.md): a Planner-first Targeted
+    // Query Builder executes alongside the real, unchanged legacy pipeline
+    // ABOVE this line, purely for comparison logging and latency
+    // measurement. Its result is NEVER used for the actual response -- not
+    // for cards, not for shortAnswer, and a failure here must never surface
+    // to the user, hence the isolating try/catch that only ever logs.
+    if (planner.validatedPlan) {
+      try {
+        const targetedStart = Date.now();
+        let targeted: Awaited<ReturnType<typeof queryRelevantUniversityFacts>> | null = null;
+        let targetedError: string | undefined;
+        try {
+          const catalog = await getUniversityCatalog();
+          const grounded = groundPlannerFields({ question, validatedPlan: planner.validatedPlan });
+          const safePlan: QueryPlan = {
+            ...planner.validatedPlan,
+            hardFilters: {
+              ...planner.validatedPlan.hardFilters,
+              housingAvailable: grounded.housingAvailable.value,
+              housingGuaranteed: grounded.housingGuaranteed.value,
+              semesters: grounded.semesters.value,
+              majors: grounded.majors.value,
+              officialSourceRequired: grounded.officialSourceRequired.value,
+              numericCostRequired: grounded.requireClearCost.value,
+            },
+            requestedFields: grounded.requestedFields.value.length ? grounded.requestedFields.value : planner.validatedPlan.requestedFields,
+          };
+          targeted = await queryRelevantUniversityFacts(safePlan, catalog);
+        } catch (error) {
+          targetedError = error instanceof Error ? error.message : String(error);
+        }
+        const targetedQueryMs = Date.now() - targetedStart;
+        logShadowParity(computeShadowParity({
+          requestId,
+          intent,
+          legacyCards: cards,
+          targeted,
+          targetedError,
+          legacyQueryMs,
+          targetedQueryMs,
+        }));
+      } catch (shadowError) {
+        // The comparison/logging step itself must be just as inert as the
+        // query it's comparing -- a bug here must never turn into a 500 for
+        // the user (this whole block sits inside handleChatRequest's own
+        // try/catch, which otherwise WOULD turn an uncaught throw here into
+        // exactly that).
+        console.error("[chat-v2] targeted-query-shadow failed", shadowError);
+      }
+    }
     if (!cards.length) {
       return NextResponse.json({
         answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",

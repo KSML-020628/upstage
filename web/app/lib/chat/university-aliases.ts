@@ -1,4 +1,4 @@
-const UNIVERSITY_ALIASES: Record<string, string[]> = {
+export const UNIVERSITY_ALIASES: Record<string, string[]> = {
   "Aoyama Gakuin University": ["아오야마가쿠인대학교", "아오야마가쿠인대", "아오야마 대학"],
   "Bogazici University": ["보아지치대학교", "보아지치대"],
   "Ca Foscari University in Venice": ["카포스카리대학교", "카포스카리대", "베네치아 카포스카리"],
