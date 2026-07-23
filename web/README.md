@@ -1,98 +1,91 @@
-# vinext-starter
+# Exchange Atlas
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A chatbot and browsing site for SKKU (Sungkyunkwan University) students
+researching outgoing exchange programs -- university requirements, language
+scores, housing, deadlines, quotas, and costs -- backed by structured data in
+Supabase and explained by Upstage Solar Pro 3.
+
+## Stack
+
+- Next.js 16 (App Router, Turbopack), React 19, TypeScript
+- Supabase (Postgres via REST) for exchange-program fact tables
+- Upstage Solar Pro 3 for query planning and answer explanation, with a
+  deterministic (non-LLM) fallback for every answer path
 
 ## Prerequisites
 
 - Node.js `>=22.13.0`
+- A Supabase project with the exchange-program schema (universities,
+  `language_requirements`, `housing_facts`, `cost_facts`,
+  `application_deadlines`, `extracted_facts`, ...)
+- An Upstage API key (optional -- the chatbot still answers without one,
+  using only the deterministic templates)
 
 ## Quick Start
 
 ```bash
 npm install
+cp .env.example .env.local   # fill in Supabase + Upstage credentials
 npm run dev
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Environment Variables
 
-## Included Shape
+See `.env.example` for the full list and inline explanations. Key ones:
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+- `SUPABASE_SERVICE_ROLE_KEY` -- without it, `/api/chat` silently falls back
+  to thinner evidence (`ui_profile_json` only) with no visible warning.
+- `SOLAR_PLANNER_MODE` -- `shadow` (default) calls the Solar planner but
+  discards its output, using the regex-based constraint detector instead;
+  `active` applies the planner's parsed conditions.
+- `SOLAR_REASONING_EFFORT` -- keep at `minimal` (default) unless you've
+  raised `max_tokens` in `query-plan.ts`/`reasoner.ts` and re-verified; see
+  the comment in `.env.example` for measured failure modes at higher levels.
 
-## Workspace Auth Headers
+## How answers are produced
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+`app/api/chat/route.ts` orchestrates the request; the actual logic lives in
+`app/lib/chat/`:
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+- `constraints.ts` -- regex-based parsing of a question into structured
+  filters (region, language score, GPA, housing, deadline, quota, ...),
+  plus conversation-memory folding across turns
+- `filters.ts` -- evaluates a university against those filters (cost
+  estimation, language/GPA/quota/deadline matching)
+- `selection.ts` -- resolves which universities a question is actually
+  about and ranks/classifies candidates
+- `cards.ts` / `sources.ts` -- builds the evidence shown per university and
+  resolves citation links
+- `answers.ts` -- deterministic Korean-language answer templates (these are
+  authoritative; Solar's own text is explanatory, not a source of truth)
+- `query-plan.ts` / `reasoner.ts` -- the optional Solar Pro 3 calls
+  (structured-output query planning and answer explanation), each with a
+  manual validator that strips anything not grounded in the actual question
+  or evidence
 
-Treat the full name as optional and fall back to email when it is absent:
+Every fact-to-string conversion goes through `app/lib/display/present-fact.ts`
+-- see `CLAUDE.md` for the display-layer rules this project enforces.
 
-```tsx
-import { headers } from "next/headers";
+## Testing
 
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm test              # unit tests: presenter + chat-policy
+node qa-runner.mjs     # 32-scenario live regression harness against a running dev server
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+`qa-runner.mjs` drives `/api/chat` through scripted multi-turn conversations
+and checks both answer correctness and display-layer hygiene (no leaked raw
+data, no bilingual duplication, no unfolded ranges, ...). Run it against
+`npm run dev` before merging any change to the chat pipeline. Use
+`QA_DELAY_MS` to slow it down if you hit the server's own rate limiter
+(10 requests/60s per IP) while testing.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- `npm run dev` -- start local development
+- `npm run build` -- production build
+- `npm run lint` -- eslint
+- `npm run db:generate` -- generate Drizzle migrations (unused by this
+  project's actual data layer, which reads Supabase directly; kept for the
+  empty `db/schema.ts` scaffold inherited from the starter template)
