@@ -23,6 +23,7 @@ import { attachRecommendationExplanations, composeShortAnswer } from "../../lib/
 import {
   detectConstraints,
   detectConversationConstraints,
+  isConservativeChitchat,
   isCostOfLivingIndexQuestion,
   isRemovedCostRecommendation,
 } from "../../lib/chat/constraints";
@@ -248,7 +249,14 @@ async function handleChatRequest(request: Request) {
       : detectedConstraints;
     const apiKey = process.env.UPSTAGE_API_KEY;
     const plannerMode = resolvePlannerMode();
-    const planner: PlannerRun = apiKey && legacyConstraints.inScope && plannerMode === "active"
+    // Only a conservative chit-chat guard blocks the Planner call outright --
+    // legacyConstraints.inScope (a much broader regex keyword list) used to
+    // gate this, so a real question with no matching keyword ("Hanken 붙을
+    // 수 있을까?", a real partner university with no "지원"/"대학"/"마감"
+    // word nearby) never got a chance to have the Planner classify it at
+    // all, regardless of how well Solar itself would have handled it.
+    const isChitchatOnly = isConservativeChitchat(question);
+    const planner: PlannerRun = apiKey && !isChitchatOnly && plannerMode === "active"
       ? await runSolarPlanner({
           apiKey,
           model: process.env.UPSTAGE_CHAT_MODEL || "solar-pro3",
@@ -259,11 +267,19 @@ async function handleChatRequest(request: Request) {
       : {
           rawPlan: null,
           validatedPlan: null,
-          issues: [!apiKey ? "missing_api_key" : plannerMode !== "active" ? "shadow_mode_skipped" : "out_of_scope"],
+          issues: [!apiKey ? "missing_api_key" : plannerMode !== "active" ? "shadow_mode_skipped" : "chitchat_guard"],
           usedSolar: false,
         };
+    // The Planner's own classification is authoritative over the regex's
+    // when it's available -- previously the final inScope always came from
+    // the regex value regardless of what the Planner concluded, so calling
+    // the Planner at all never actually changed whether an in-scope-but-
+    // regex-missed question got answered.
+    const finalInScope = planner.validatedPlan
+      ? planner.validatedPlan.intent !== "out_of_scope"
+      : legacyConstraints.inScope;
     const constraints = plannerMode === "active"
-      ? applyValidatedPlannerPlan(legacyConstraints, planner.validatedPlan)
+      ? { ...applyValidatedPlannerPlan(legacyConstraints, planner.validatedPlan), inScope: finalInScope }
       : legacyConstraints;
     console.info("[chat-v2] planner-plan", {
       requestId,
@@ -281,6 +297,18 @@ async function handleChatRequest(request: Request) {
       },
       contextUniversityIds,
       explicitFollowup,
+    });
+    console.info("[chat-v2] scope-disagreement", {
+      requestId,
+      regexInScope: legacyConstraints.inScope,
+      plannerIntent: planner.validatedPlan?.intent ?? null,
+      finalInScope: constraints.inScope,
+      disagreementType:
+        !legacyConstraints.inScope && constraints.inScope
+          ? "regex_false_negative"
+          : legacyConstraints.inScope && !constraints.inScope
+            ? "regex_false_positive"
+            : null,
     });
     // Computed once and reused by both the early unknown-institution check
     // below and the main exactTargets resolution further down -- the planner

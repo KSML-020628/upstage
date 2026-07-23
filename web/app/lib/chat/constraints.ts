@@ -49,6 +49,43 @@ export function isExchangeQuestion(question: string) {
   ]);
 }
 
+// isExchangeQuestion's keyword list gates whether the Solar planner even
+// gets CALLED (see route.ts) -- a real question with no matching keyword
+// ("Hanken 붙을 수 있을까?", a real partner university name with no
+// "지원"/"대학"/"마감"/etc word nearby) used to be rejected outright before
+// the planner ever had a chance to classify it correctly. This replaces
+// that gate with a much narrower one: only skip the Planner call for things
+// that are unambiguously not a question at all (greetings, thanks,
+// laughter, an emoji-only message) -- everything else gets a real Planner
+// classification, and the FINAL scope decision uses planner.validatedPlan's
+// own intent when available (see finalInScope in route.ts). See
+// docs/decisions.md.
+const CHITCHAT_ONLY_PATTERNS = [
+  /^(안녕|안녕하세요|안녕하십니까|hi|hello|hey)[!.~?\s]*$/i,
+  /^(고마워|고마워요|고맙습니다|감사합니다|감사해요|고마워ㅎㅎ|thanks|thank you)[!.~?\s]*$/i,
+];
+
+function isLaughterOnly(text: string) {
+  return /^[ㅋㅎ\s]+$/.test(text);
+}
+
+function isEmojiOnly(text: string) {
+  const stripped = text.replace(/\s+/g, "");
+  return stripped.length > 0 && /^\p{Extended_Pictographic}+$/u.test(stripped);
+}
+
+export function isConservativeChitchat(question: string): boolean {
+  const raw = question.trim();
+  if (!raw) return true;
+  // Laughter/emoji checks run on the raw text -- NFKC would rewrite the
+  // Hangul compatibility jamo used to type "ㅋㅋㅋ" (U+314B) into standalone
+  // conjoining jamo (U+110F), a different codepoint the laughter regex
+  // wouldn't match, silently making it fall through as "not chit-chat".
+  if (isLaughterOnly(raw) || isEmojiOnly(raw)) return true;
+  const normalized = question.normalize("NFKC").trim();
+  return CHITCHAT_ONLY_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 export function isCostOfLivingIndexQuestion(question: string) {
   const text = normalizeSearchText(question);
   const raw = question.normalize("NFKC").toLowerCase();
