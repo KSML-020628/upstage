@@ -1,5 +1,5 @@
 import { parseDeadlineDateConstraint } from "./chat-policy";
-import type { ChatMessage, Intent, QueryConstraints, QuotaMode } from "./types";
+import type { ChatMessage, Intent, LanguageTestName, QueryConstraints, QuotaMode } from "./types";
 import { detectCountries, detectExcludedCountries, includesAny, normalizeSearchText } from "./utils";
 
 export function detectIntent(question: string): Intent {
@@ -49,7 +49,7 @@ export function isRemovedCostRecommendation(question: string) {
   return /비용[^\n]{0,30}(?:비교|순위|랭킹|가장|최저|저렴|싼|낮은\s*순|적게|추천)|(?:compare|rank|ranking|cheapest|lowest|recommend)[^\n]{0,30}(?:cost|fee)/i.test(text);
 }
 
-export function detectLanguageRequirement(question: string) {
+export function detectLanguageRequirement(question: string): { test: LanguageTestName; score: number; subscore?: number } | undefined {
   const text = question
     .normalize("NFKC")
     .toLowerCase()

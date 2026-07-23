@@ -9,6 +9,7 @@ import {
 } from "../display/present-fact";
 import { firstSource, rowSource, universitySources } from "./sources";
 import { CURRENCY_TO_KRW } from "./supabase-facts";
+import { LANGUAGE_TEST_ALIASES } from "./types";
 import type {
   ConditionCheck,
   ConditionState,
@@ -18,6 +19,7 @@ import type {
   DeadlineType,
   EvaluatedUniversity,
   Intent,
+  LanguageTestName,
   QueryConstraints,
 } from "./types";
 import {
@@ -325,20 +327,12 @@ export function housingGuaranteeSummary(university: University) {
   return "배정 보장: 확인 필요";
 }
 
-function matchesLanguageTest(stored: unknown, selected: string) {
+function matchesLanguageTest(stored: unknown, selected: LanguageTestName) {
   const value = normalizeSearchText(stored);
-  const aliases: Record<string, string[]> = {
-    "IELTS Academic": ["ielts"],
-    "TOEFL iBT": ["toefl"],
-    "Cambridge CAE/CPE": ["cambridge", "cae", "cpe"],
-    "PTE Academic": ["pte", "pearson"],
-    "Duolingo English Test": ["duolingo"],
-    "Oxford ELLT": ["oxford", "ellt"],
-  };
-  return (aliases[selected] ?? []).some((alias) => value.includes(alias));
+  return LANGUAGE_TEST_ALIASES[selected].some((alias) => value.includes(alias));
 }
 
-function validLanguageScore(test: string, value: unknown) {
+function validLanguageScore(test: LanguageTestName, value: unknown) {
   const score = numericValue(value);
   if (score === undefined) return undefined;
   if (test === "IELTS Academic") return score >= 4 && score <= 9 ? score : undefined;
@@ -358,30 +352,31 @@ function languageSubscoreRequirement(row: Record<string, unknown>) {
 }
 
 function languageEvaluation(university: University, constraints: QueryConstraints): ConditionCheck | undefined {
-  if (!constraints.languageTest || constraints.languageScore === undefined) return undefined;
+  const languageTest = constraints.languageTest;
+  if (!languageTest || constraints.languageScore === undefined) return undefined;
   const rows = programOf(university)?.language_requirements ?? [];
-  const matching = rows.filter((row) => matchesLanguageTest(row.test_type, constraints.languageTest ?? ""));
+  const matching = rows.filter((row) => matchesLanguageTest(row.test_type, languageTest));
   const valid = matching
-    .map((row) => ({ row, score: validLanguageScore(constraints.languageTest ?? "", row.minimum_score ?? row.overall_score) }))
+    .map((row) => ({ row, score: validLanguageScore(languageTest, row.minimum_score ?? row.overall_score) }))
     .filter((item): item is { row: Record<string, unknown>; score: number } => item.score !== undefined);
-  if (!valid.length) return { key: "language", label: constraints.languageTest, state: "unknown", detail: `${constraints.languageTest} 유효 점수 미확인` };
+  if (!valid.length) return { key: "language", label: languageTest, state: "unknown", detail: `${languageTest} 유효 점수 미확인` };
 
   const distinctScores = [...new Set(valid.map((item) => item.score))];
   if (distinctScores.length > 1) {
-    return { key: "language", label: constraints.languageTest, state: "unknown", detail: `프로그램별 요구 점수 충돌 (${distinctScores.join(" / ")})` };
+    return { key: "language", label: languageTest, state: "unknown", detail: `프로그램별 요구 점수 충돌 (${distinctScores.join(" / ")})` };
   }
   const required = distinctScores[0];
   if (constraints.languageScore < required) {
-    return { key: "language", label: constraints.languageTest, state: "failed", detail: `요구 ${required}, 입력 ${constraints.languageScore}` };
+    return { key: "language", label: languageTest, state: "failed", detail: `요구 ${required}, 입력 ${constraints.languageScore}` };
   }
   const subscore = Math.max(...valid.map((item) => languageSubscoreRequirement(item.row) ?? -1));
   if (subscore >= 0 && constraints.languageSubscore === undefined) {
-    return { key: "language", label: constraints.languageTest, state: "unknown", detail: `전체 ${required} 충족, 각 영역 ${subscore} 확인 필요` };
+    return { key: "language", label: languageTest, state: "unknown", detail: `전체 ${required} 충족, 각 영역 ${subscore} 확인 필요` };
   }
   if (subscore >= 0 && (constraints.languageSubscore ?? -1) < subscore) {
-    return { key: "language", label: constraints.languageTest, state: "failed", detail: `각 영역 요구 ${subscore}, 입력 ${constraints.languageSubscore}` };
+    return { key: "language", label: languageTest, state: "failed", detail: `각 영역 요구 ${subscore}, 입력 ${constraints.languageSubscore}` };
   }
-  return { key: "language", label: constraints.languageTest, state: "met", detail: `요구 ${required}, 입력 ${constraints.languageScore}${subscore >= 0 ? ` · 각 영역 ${subscore} 충족` : ""}` };
+  return { key: "language", label: languageTest, state: "met", detail: `요구 ${required}, 입력 ${constraints.languageScore}${subscore >= 0 ? ` · 각 영역 ${subscore} 충족` : ""}` };
 }
 
 function satisfiesLanguage(university: University, constraints: QueryConstraints) {

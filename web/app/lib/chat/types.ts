@@ -1,5 +1,24 @@
 import type { DateComparator } from "./chat-policy";
 
+// Canonical language-test names, shared by every place that produces or
+// consumes QueryConstraints.languageTest (constraints.ts's regex detector,
+// planner-integration.ts's merge of the Solar planner's plan, and
+// filters.ts's matching/scoring logic). A mismatched string here (e.g.
+// "IELTS" instead of "IELTS Academic") silently makes matchesLanguageTest
+// find zero rows for every university, so languageEvaluation can never
+// return "met" -- only "unknown" -- without ever throwing or logging
+// anything wrong. Typing languageTest as this union instead of a bare
+// string turns that class of bug into a compile error.
+export const LANGUAGE_TEST_ALIASES = {
+  "IELTS Academic": ["ielts"],
+  "TOEFL iBT": ["toefl"],
+  "Cambridge CAE/CPE": ["cambridge", "cae", "cpe"],
+  "PTE Academic": ["pte", "pearson"],
+  "Duolingo English Test": ["duolingo"],
+  "Oxford ELLT": ["oxford", "ellt"],
+} as const;
+export type LanguageTestName = keyof typeof LANGUAGE_TEST_ALIASES;
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -88,7 +107,7 @@ export type QueryConstraints = {
   countries: string[];
   excludedCountries: string[];
   excludeAsia: boolean;
-  languageTest?: string;
+  languageTest?: LanguageTestName;
   languageScore?: number;
   languageSubscore?: number;
   budgetKrwSemester?: number;

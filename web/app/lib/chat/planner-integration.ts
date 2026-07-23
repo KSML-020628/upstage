@@ -1,5 +1,5 @@
 import type { QueryPlan } from "./query-plan";
-import type { Intent, QueryConstraints } from "./types";
+import type { Intent, LanguageTestName, QueryConstraints } from "./types";
 import { normalizeSearchText } from "./utils";
 
 // Whether the Solar planner returned a plan that actually constrains the
@@ -51,7 +51,20 @@ export function applyValidatedPlannerPlan(legacy: QueryConstraints, plan: QueryP
   const plannedIntent = plannerIntent(plan.intent);
   const regions = (hard.regions ?? []).map(normalizeSearchText);
   const excludedRegions = (hard.excludedRegions ?? []).map(normalizeSearchText);
-  const languageTest = hard.ieltsMax !== undefined ? "IELTS" : hard.toeflMax !== undefined ? "TOEFL" : legacy.languageTest;
+  // Must match the exact canonical names in LANGUAGE_TEST_ALIASES
+  // (types.ts) -- matchesLanguageTest looks these up by exact string, and a
+  // near-miss like "IELTS" (missing "Academic") silently finds zero rows for
+  // every university, so languageEvaluation can never return "met" for any
+  // university, only "unknown". This is exactly that bug: it shipped here
+  // as "IELTS"/"TOEFL" and was never caught because SOLAR_PLANNER_MODE
+  // defaulted to "shadow" (this merged plan was computed but discarded)
+  // until it became "active" by default and every language-score question
+  // started reporting zero matched universities.
+  const languageTest: LanguageTestName | undefined = hard.ieltsMax !== undefined
+    ? "IELTS Academic"
+    : hard.toeflMax !== undefined
+      ? "TOEFL iBT"
+      : legacy.languageTest;
   const languageScore = hard.ieltsMax ?? hard.toeflMax ?? legacy.languageScore;
   const resolvedIntent = legacy.intent !== "general" ? legacy.intent : (plannedIntent ?? legacy.intent);
   const requestedFields = [...new Set([...legacy.requestedFields, ...plan.requestedFields])];
