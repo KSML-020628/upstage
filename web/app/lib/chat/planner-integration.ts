@@ -1,6 +1,6 @@
 import type { QueryPlan } from "./query-plan";
 import type { Intent, LanguageTestName, QueryConstraints } from "./types";
-import { normalizeSearchText } from "./utils";
+import { normalizeSearchText } from "./utils.ts";
 
 // Whether the Solar planner returned a plan that actually constrains the
 // search (a region/country/language/GPA/housing/quota/major condition), as
@@ -71,7 +71,14 @@ export function applyValidatedPlannerPlan(legacy: QueryConstraints, plan: QueryP
   return {
     ...legacy,
     intent: resolvedIntent,
-    topN: legacy.topN !== 4 ? legacy.topN : plan.limit,
+    // legacy.topN !== 4 used to stand in for "the user gave an explicit
+    // count", but 4 is also the field's own default -- a real "4개" was
+    // indistinguishable from no count at all, so a Planner-guessed limit
+    // could silently override a real explicit "4개" or (see q4's measured
+    // nondeterminism in docs/decisions.md) get adopted when the user never
+    // asked for a count and Solar's own limit guess wasn't even grounded in
+    // the question text. explicitTopN is the direct signal instead.
+    topN: legacy.explicitTopN ? legacy.topN : plan.limit,
     requireEurope: regions.some((item) => item === "europe") || legacy.requireEurope,
     requireAsia: regions.some((item) => item === "asia") || legacy.requireAsia,
     requireAmericas: regions.some((item) => /americas?|north america|south america/.test(item)) || legacy.requireAmericas,

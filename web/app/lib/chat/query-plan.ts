@@ -79,19 +79,39 @@ const semesters = (value: unknown) => strings(value).flatMap((item) => {
   return [];
 }).filter((item, index, items) => items.indexOf(item) === index);
 
-const groundedRegions = (question: string, value: unknown, issues: string[], prefix: string) => {
+const REGION_KEYWORDS: Record<string, RegExp> = {
+  europe: /유럽|europe/,
+  asia: /아시아|asia/,
+  americas: /미주|북미|남미|아메리카|americas?|north america|south america/,
+};
+const EXCLUSION_MARKER = /제외|빼고|빼줘|exclude|without/;
+
+function hasExclusionMarkerNear(q: string, keyword: RegExp): boolean {
+  const k = keyword.source;
+  const m = EXCLUSION_MARKER.source;
+  return new RegExp(`(?:${k})[^\\n]{0,18}(?:${m})|(?:${m})[^\\n]{0,18}(?:${k})`, "i").test(q);
+}
+
+// A region string is textually "grounded" whenever its keyword appears
+// anywhere in the question -- but that alone can't tell an inclusion
+// ("유럽 대학만") from an exclusion ("아시아 빼고") mentioning the SAME keyword.
+// Solar occasionally drops an exclusion condition into the wrong polarity
+// field (regions instead of excludedRegions); a plain substring check would
+// happily accept that. For a positive `regions` claim, also reject it if an
+// exclusion marker sits right next to the same keyword -- a genuine
+// inclusion request has no reason to pair the region with "제외"/"빼고".
+const groundedRegions = (question: string, value: unknown, issues: string[], prefix: string, polarity: "include" | "exclude") => {
   const q = question.normalize("NFKC").toLowerCase();
   return strings(value).filter((item) => {
     const region = item.normalize("NFKC").toLowerCase();
-    const grounded = region === "europe"
-      ? /유럽|europe/.test(q)
-      : region === "asia"
-        ? /아시아|asia/.test(q)
-        : /americas?|north america|south america/.test(region)
-          ? /미주|북미|남미|아메리카|americas?|north america|south america/.test(q)
-          : q.includes(region);
-    if (!grounded) issues.push(`${prefix}_not_grounded:${item}`);
-    return grounded;
+    const keyword = REGION_KEYWORDS[region];
+    const grounded = keyword ? keyword.test(q) : q.includes(region);
+    if (!grounded) { issues.push(`${prefix}_not_grounded:${item}`); return false; }
+    if (polarity === "include" && keyword && hasExclusionMarkerNear(q, keyword)) {
+      issues.push(`region_polarity_conflict:${item}`);
+      return false;
+    }
+    return true;
   });
 };
 
@@ -144,19 +164,39 @@ export function validateQueryPlan(question: string, value: unknown, knownUnivers
   const rawFollowup = raw.followupReference && typeof raw.followupReference === "object"
     ? raw.followupReference as Record<string, unknown>
     : {};
-  const rawLimit = finite(raw.limit) ?? 4;
-  const limit = Math.max(1, Math.min(5, Math.trunc(rawLimit)));
-  if (limit !== rawLimit) issues.push("limit_clamped");
+  // Solar's own limit guess is only trustworthy when the exact number it
+  // picked is actually present in the question -- otherwise it's Solar's own
+  // unrequested default, not the user's. Adopting it regardless is exactly
+  // what produced q4's measured nondeterminism: the same question with no
+  // stated count returned 5 cards on most calls and 1 on others, purely
+  // because Solar's own ungrounded `limit` guess varied between identical
+  // calls (see docs/decisions.md, "q4 20-run diagnostic").
+  const rawLimit = finite(raw.limit);
+  const limitGrounded = rawLimit !== undefined && hasNumber(question, rawLimit);
+  if (rawLimit !== undefined && !limitGrounded) issues.push("limit_not_grounded");
+  const limit = limitGrounded ? Math.max(1, Math.min(5, Math.trunc(rawLimit!))) : 4;
+  if (limitGrounded && limit !== rawLimit) issues.push("limit_clamped");
+
+  const regions = groundedRegions(question, rawHard.regions, issues, "region", "include");
+  const excludedRegions = groundedRegions(question, rawHard.excludedRegions, issues, "excluded_region", "exclude");
+  const countries = groundedCountries(question, rawHard.countries, issues, "country");
+  const excludedCountries = groundedCountries(question, rawHard.excludedCountries, issues, "excluded_country");
+  // Solar claiming the SAME region/country as both required and excluded is
+  // a direct self-contradiction (as opposed to the include-vs-exclude
+  // keyword-polarity mixup groundedRegions already catches above) -- surface
+  // it distinctly so it's greppable instead of silently keeping both.
+  for (const region of regions) if (excludedRegions.includes(region)) issues.push(`region_include_exclude_conflict:${region}`);
+  for (const country of countries) if (excludedCountries.includes(country)) issues.push(`country_include_exclude_conflict:${country}`);
 
   return {
     plan: {
       intent,
       universityNames,
       hardFilters: {
-        regions: groundedRegions(question, rawHard.regions, issues, "region"),
-        countries: groundedCountries(question, rawHard.countries, issues, "country"),
-        excludedRegions: groundedRegions(question, rawHard.excludedRegions, issues, "excluded_region"),
-        excludedCountries: groundedCountries(question, rawHard.excludedCountries, issues, "excluded_country"),
+        regions,
+        countries,
+        excludedRegions,
+        excludedCountries,
         ...cleanNumbers,
         housingAvailable: bool(rawHard.housingAvailable),
         housingGuaranteed: bool(rawHard.housingGuaranteed),

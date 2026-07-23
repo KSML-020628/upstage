@@ -1,6 +1,6 @@
-import { parseDeadlineDateConstraint } from "./chat-policy";
+import { parseDeadlineDateConstraint } from "./chat-policy.ts";
 import type { ChatMessage, ClearableConditionField, Intent, LanguageTestName, QueryConstraints, QuotaMode } from "./types";
-import { detectCountries, detectExcludedCountries, includesAny, normalizeSearchText } from "./utils";
+import { detectCountries, detectExcludedCountries, includesAny, normalizeSearchText } from "./utils.ts";
 
 // A follow-up like "어학 성적이 필요 없는 곳은?" after a turn that set
 // languageScore=6.0 must actually drop that condition, not just fail to
@@ -205,6 +205,7 @@ export function detectConstraints(question: string): QueryConstraints {
     requireAmericas: /미주|북미|남미|아메리카|americas?|north america|south america/i.test(rawQuestion),
     sortGpaLowest: /(?:학점|gpa)[^\n]{0,30}(?:가장\s*낮|낮은\s*순|최저|lowest|ascending)|(?:가장\s*낮|낮은\s*순|최저|lowest)[^\n]{0,30}(?:학점|gpa)/i.test(question),
     topN: Math.max(1, Math.min(8, topValue ? Number(topValue) : 4)),
+    explicitTopN: Boolean(topValue),
     requireEurope: /유럽|europe|european/.test(text) || /유럽|europe|european/.test(rawQuestion),
     inScope: isExchangeQuestion(question) && !costOfLivingIndexQuestion,
     requireHousing: /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(text) || /기숙|숙소|주거|housing|accommodation|dorm|residence/.test(rawQuestion),

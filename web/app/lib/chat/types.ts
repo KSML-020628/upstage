@@ -109,6 +109,14 @@ export type ClearableConditionField = "language" | "gpa" | "major" | "housing" |
 export type QueryConstraints = {
   intent: Intent;
   topN: number;
+  // Whether topN came from an actual count in the user's own text (e.g.
+  // "3개") rather than the arbitrary default of 4 -- distinguishes "the user
+  // asked for exactly 4" from "the user didn't say a count", which the bare
+  // number 4 alone can't (see planner-integration.ts's topN merge: the old
+  // `legacy.topN !== 4` check silently treated its own default as "no
+  // explicit count", which also meant a real explicit "4개" was
+  // indistinguishable from no count at all).
+  explicitTopN: boolean;
   requireEurope: boolean;
   requireAsia: boolean;
   requireAmericas: boolean;
