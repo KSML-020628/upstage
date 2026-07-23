@@ -73,7 +73,40 @@ function validateReasonerOutput(value: unknown, packet: EvidencePacket): { outpu
   };
 }
 
-export async function runSolarReasoner(args: { apiKey: string; model: string; packet: EvidencePacket }): Promise<ReasonerRun> {
+const REASONER_OUTPUT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    shortAnswer: { type: "string" },
+    recommendations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          universityId: { type: "string" },
+          reasonFactIds: { type: "array", items: { type: "string" } },
+          cautionFactIds: { type: "array", items: { type: "string" } },
+          explanation: { type: "string" },
+        },
+        required: ["universityId", "reasonFactIds", "cautionFactIds", "explanation"],
+        additionalProperties: false,
+      },
+    },
+    unknownFields: { type: "array", items: { type: "string" } },
+    suggestedDetailTab: {
+      type: "string",
+      enum: ["summary", "requirements", "deadlines", "housing", "cost", "restrictions", "sources"],
+    },
+  },
+  required: ["shortAnswer", "recommendations", "unknownFields", "suggestedDetailTab"],
+  additionalProperties: false,
+} as const;
+
+export async function runSolarReasoner(args: {
+  apiKey: string;
+  model: string;
+  packet: EvidencePacket;
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+}): Promise<ReasonerRun> {
   if (!args.packet.universities.length) return { output: null, usedSolar: false, issues: ["empty_evidence_packet"] };
   try {
     const response = await fetch("https://api.upstage.ai/v1/chat/completions", {
@@ -83,7 +116,11 @@ export async function runSolarReasoner(args: { apiKey: string; model: string; pa
         model: args.model,
         temperature: 0.1,
         max_tokens: 1000,
-        response_format: { type: "json_object" },
+        reasoning_effort: args.reasoningEffort ?? "minimal",
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "reasoner_output", strict: true, schema: REASONER_OUTPUT_JSON_SCHEMA },
+        },
         messages: [
           { role: "system", content: "Explain only the supplied evidence. Return JSON only. Never create a number, URL, university, or fact ID. Partial means additional verification is required." },
           { role: "user", content: `Write a concise Korean answer. Return {shortAnswer,recommendations:[{universityId,reasonFactIds,cautionFactIds,explanation}],unknownFields,suggestedDetailTab}. EVIDENCE_PACKET=${JSON.stringify(args.packet)}` },

@@ -194,11 +194,81 @@ function extractJson(text: string): unknown {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+const HARD_FILTER_KEYS = [
+  "regions", "countries", "excludedRegions", "excludedCountries",
+  "ieltsMax", "ieltsMinimumSubscore", "toeflMax", "gpaValue", "gpaScale",
+  "housingAvailable", "housingGuaranteed", "quotaMin", "semesters",
+  "academicYears", "majors", "officialSourceRequired", "numericCostRequired",
+] as const;
+
+const QUERY_PLAN_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: { type: "string", enum: Array.from(INTENTS) },
+    universityNames: { type: "array", items: { type: "string" } },
+    hardFilters: {
+      type: "object",
+      properties: {
+        regions: { type: "array", items: { type: "string" } },
+        countries: { type: "array", items: { type: "string" } },
+        excludedRegions: { type: "array", items: { type: "string" } },
+        excludedCountries: { type: "array", items: { type: "string" } },
+        ieltsMax: { type: ["number", "null"] },
+        ieltsMinimumSubscore: { type: ["number", "null"] },
+        toeflMax: { type: ["number", "null"] },
+        gpaValue: { type: ["number", "null"] },
+        gpaScale: { type: ["number", "null"] },
+        housingAvailable: { type: ["boolean", "null"] },
+        housingGuaranteed: { type: ["boolean", "null"] },
+        quotaMin: { type: ["number", "null"] },
+        semesters: { type: "array", items: { type: "string" } },
+        academicYears: { type: "array", items: { type: "string" } },
+        majors: { type: "array", items: { type: "string" } },
+        officialSourceRequired: { type: ["boolean", "null"] },
+        numericCostRequired: { type: ["boolean", "null"] },
+      },
+      required: HARD_FILTER_KEYS,
+      additionalProperties: false,
+    },
+    softPreferences: {
+      type: "object",
+      properties: {
+        lowerCost: { type: ["boolean", "null"] },
+        englishCourses: { type: ["boolean", "null"] },
+        housingPreferred: { type: ["boolean", "null"] },
+        earlierDeadline: { type: ["boolean", "null"] },
+      },
+      required: ["lowerCost", "englishCourses", "housingPreferred", "earlierDeadline"],
+      additionalProperties: false,
+    },
+    requestedFields: { type: "array", items: { type: "string", enum: Array.from(FIELDS) } },
+    limit: { type: "integer" },
+    followupReference: {
+      type: "object",
+      properties: {
+        enabled: { type: "boolean" },
+        ordinal: { type: ["integer", "null"] },
+        previousResultOnly: { type: ["boolean", "null"] },
+      },
+      required: ["enabled", "ordinal", "previousResultOnly"],
+      additionalProperties: false,
+    },
+    clarificationNeeded: { type: "boolean" },
+    clarificationQuestion: { type: ["string", "null"] },
+  },
+  required: [
+    "intent", "universityNames", "hardFilters", "softPreferences", "requestedFields",
+    "limit", "followupReference", "clarificationNeeded", "clarificationQuestion",
+  ],
+  additionalProperties: false,
+} as const;
+
 export async function runSolarPlanner(args: {
   apiKey: string;
   model: string;
   question: string;
   knownUniversityNames: string[];
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 }): Promise<PlannerRun> {
   const prompt = `Convert the Korean or English exchange-student question into the supplied JSON contract.\nRules:\n- hardFilters are mandatory; softPreferences are preferences.\n- Preserve decimals. SKKU GPA defaults to a 4.5 scale.\n- Distinguish housingAvailable (the student can apply or housing exists) from housingGuaranteed (allocation is guaranteed). Asking to apply for housing does not mean guaranteed.\n- Normalize spring/봄학기 to semesters:[\"spring\"] and autumn/fall/가을학기 to semesters:[\"autumn\"].\n- Never invent numbers, countries, universities, or URLs.\n- Do not write SQL. Return JSON only.\n- universityNames must exactly match one of KNOWN_UNIVERSITIES.\nKNOWN_UNIVERSITIES=${JSON.stringify(args.knownUniversityNames)}\nQUESTION=${JSON.stringify(args.question)}\nJSON_KEYS={intent,universityNames,hardFilters,softPreferences,requestedFields,limit,followupReference,clarificationNeeded,clarificationQuestion}`;
   try {
@@ -209,7 +279,11 @@ export async function runSolarPlanner(args: {
         model: args.model,
         temperature: 0,
         max_tokens: 900,
-        response_format: { type: "json_object" },
+        reasoning_effort: args.reasoningEffort ?? "minimal",
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "query_plan", strict: true, schema: QUERY_PLAN_JSON_SCHEMA },
+        },
         messages: [
           { role: "system", content: "You are a constrained query planner. Output valid JSON only." },
           { role: "user", content: prompt },

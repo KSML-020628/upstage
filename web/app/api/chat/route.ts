@@ -2424,6 +2424,12 @@ function followupOrdinal(question: string) {
   return undefined;
 }
 
+const REASONING_EFFORT_VALUES = new Set(["minimal", "low", "medium", "high"]);
+function resolveReasoningEffort(): "minimal" | "low" | "medium" | "high" {
+  const raw = process.env.SOLAR_REASONING_EFFORT;
+  return raw && REASONING_EFFORT_VALUES.has(raw) ? raw as "minimal" | "low" | "medium" | "high" : "minimal";
+}
+
 async function v2Response(args: {
   question: string;
   cards: ResultCard[];
@@ -2437,7 +2443,7 @@ async function v2Response(args: {
   const evidenceCards = args.cards.map((card) => ({ ...card, match_status: card.match_status ?? "matched" as const }));
   const packet = createEvidencePacket(args.question, args.planner.validatedPlan, evidenceCards);
   const reasoner = apiKey
-    ? await runSolarReasoner({ apiKey, model, packet })
+    ? await runSolarReasoner({ apiKey, model, packet, reasoningEffort: resolveReasoningEffort() })
     : { output: null, usedSolar: false, issues: ["missing_api_key"] };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
   // Only the reasoner's own text needs this pass -- presentation.shortAnswer
@@ -2781,6 +2787,7 @@ async function handleChatRequest(request: Request) {
           model: process.env.UPSTAGE_CHAT_MODEL || "solar-pro3",
           question,
           knownUniversityNames: universities.map((university) => university.university_name),
+          reasoningEffort: resolveReasoningEffort(),
         })
       : { rawPlan: null, validatedPlan: null, issues: [apiKey ? "out_of_scope" : "missing_api_key"], usedSolar: false };
     const constraints = (process.env.SOLAR_PLANNER_MODE || "shadow") === "active"
