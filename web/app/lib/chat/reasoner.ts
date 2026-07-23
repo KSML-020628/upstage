@@ -1,4 +1,4 @@
-import type { EvidencePacket } from "./evidence-packet";
+import type { EvidencePacket, EvidenceUniversity } from "./evidence-packet";
 
 export type ReasonerOutput = {
   shortAnswer: string;
@@ -26,19 +26,41 @@ function extractJson(text: string): unknown {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-function numericTokens(text: string) {
+export function numericTokens(text: string) {
   return text.match(/\d+(?:[,.]\d+)*/g)?.map((item) => item.replace(/,/g, "")) ?? [];
 }
 
-function validateReasonerOutput(value: unknown, packet: EvidencePacket): { output: ReasonerOutput | null; issues: string[] } {
+// A recommendation's explanation may only cite numbers that appear in *that
+// university's own* facts/condition detail, plus numbers the student
+// themselves stated in the question (their own criteria are fair game to
+// repeat back for any university). It must NOT be validated against the
+// whole evidence packet -- that let a number from University A's facts
+// silently ground a false claim attributed to University B's
+// recommendation, since both were in the same multi-university packet.
+function universityGroundedNumbers(university: EvidenceUniversity, question: string): Set<string> {
+  const universityText = `${JSON.stringify(university.facts)} ${university.conditionSummary.join(" ")}`;
+  return new Set([...numericTokens(universityText), ...numericTokens(question)]);
+}
+
+export function validateReasonerOutput(value: unknown, packet: EvidencePacket): { output: ReasonerOutput | null; issues: string[] } {
   const issues: string[] = [];
   if (!value || typeof value !== "object" || Array.isArray(value)) return { output: null, issues: ["reasoner_output_not_object"] };
   const raw = value as Record<string, unknown>;
-  const shortAnswer = typeof raw.shortAnswer === "string" ? raw.shortAnswer.trim().slice(0, 500) : "";
-  if (!shortAnswer || /https?:\/\//i.test(shortAnswer)) return { output: null, issues: ["unsafe_short_answer"] };
-  const evidenceText = JSON.stringify(packet);
-  const allowedNumbers = new Set([...numericTokens(evidenceText), ...numericTokens(packet.question)]);
-  if (numericTokens(shortAnswer).some((token) => !allowedNumbers.has(token))) return { output: null, issues: ["ungrounded_number"] };
+
+  // The top-level narrative and the per-university recommendations are
+  // validated independently -- a bad/ungrounded shortAnswer must not throw
+  // away otherwise-good per-university explanations (see docs/decisions.md).
+  // This narrative can legitimately compare multiple universities in the
+  // packet, so it's grounded against the whole packet rather than one
+  // university's own facts.
+  const rawShortAnswer = typeof raw.shortAnswer === "string" ? raw.shortAnswer.trim().slice(0, 500) : "";
+  const packetNumbers = new Set([...numericTokens(JSON.stringify(packet)), ...numericTokens(packet.question)]);
+  const shortAnswerValid = Boolean(rawShortAnswer)
+    && !/https?:\/\//i.test(rawShortAnswer)
+    && numericTokens(rawShortAnswer).every((token) => packetNumbers.has(token));
+  if (!rawShortAnswer) issues.push("empty_short_answer");
+  else if (!shortAnswerValid) issues.push("unsafe_short_answer");
+  const shortAnswer = shortAnswerValid ? rawShortAnswer : "";
 
   const byUniversity = new Map(packet.universities.map((item) => [item.universityId, item]));
   const rawRecommendations = Array.isArray(raw.recommendations) ? raw.recommendations : [];
@@ -49,19 +71,41 @@ function validateReasonerOutput(value: unknown, packet: EvidencePacket): { outpu
     const universityId = typeof row.universityId === "string" ? row.universityId : "";
     const university = byUniversity.get(universityId);
     if (!university) { issues.push("unknown_recommendation_university"); continue; }
+
     const allowedFactIds = new Set(university.facts.map((fact) => fact.factId));
     const ids = (input: unknown) => Array.isArray(input) ? input.filter((id): id is string => typeof id === "string" && allowedFactIds.has(id)) : [];
+    const reasonFactIds = ids(row.reasonFactIds);
+    const cautionFactIds = ids(row.cautionFactIds);
+
     const explanation = typeof row.explanation === "string" ? row.explanation.trim().slice(0, 260) : "";
-    if (/https?:\/\//i.test(explanation) || numericTokens(explanation).some((token) => !allowedNumbers.has(token))) {
-      issues.push("unsafe_explanation");
+    if (!explanation) continue;
+    const groundedNumbers = universityGroundedNumbers(university, packet.question);
+    if (/https?:\/\//i.test(explanation) || numericTokens(explanation).some((token) => !groundedNumbers.has(token))) {
+      issues.push(`unsafe_explanation:${universityId}`);
       continue;
     }
-    recommendations.push({ universityId, reasonFactIds: ids(row.reasonFactIds), cautionFactIds: ids(row.cautionFactIds), explanation });
+    // "partial" means the server itself could not confirm every queried
+    // condition for this university. An explanation that cites reasons but
+    // discloses zero caution reads as an unqualified match -- i.e. Solar
+    // upgraded an unconfirmed/unknown condition to a positive claim. Drop
+    // just this one recommendation (the card's own server-determined facts
+    // are untouched) rather than let that stand.
+    if (university.verdict === "partial" && cautionFactIds.length === 0) {
+      issues.push(`unknown_upgraded_to_positive:${universityId}`);
+      continue;
+    }
+    recommendations.push({ universityId, reasonFactIds, cautionFactIds, explanation });
   }
   const tabs = new Set(["summary", "requirements", "deadlines", "housing", "cost", "restrictions", "sources"]);
   const suggestedDetailTab = tabs.has(String(raw.suggestedDetailTab))
     ? String(raw.suggestedDetailTab) as ReasonerOutput["suggestedDetailTab"]
     : "summary";
+
+  // Only give up entirely when there's truly nothing usable -- a rejected
+  // narrative with valid per-university recommendations (or vice versa)
+  // still returns a real output, so route.ts can use whichever half worked.
+  if (!shortAnswer && !recommendations.length) return { output: null, issues };
+
   return {
     output: {
       shortAnswer,

@@ -213,37 +213,6 @@ export function responsePresentation(detailedAnswer: string, cards: ResultCard[]
   };
 }
 
-// Server-determined facts for a classified (match_status-bearing) query --
-// undefined when the query wasn't classified at all (a direct lookup, cost,
-// deadline, ... answer), which the caller should treat as "no factual header
-// to prepend", not "here's a fallback string" (that used to be this
-// function's job, which meant a classified query's shortAnswer was *always*
-// this template with the Solar reasoner's shortAnswer discarded outright,
-// even when it had passed validation -- see composeFinalShortAnswer in
-// app/api/chat/route.ts, which now appends the reasoner's narrative after
-// this instead of the caller choosing one or the other).
-export function authoritativeFactsSummary(cards: ResultCard[]): string | undefined {
-  const classified = cards.filter((card) => card.match_status === "matched" || card.match_status === "partial");
-  if (!classified.length) return undefined;
-
-  const matched = classified.filter((card) => card.match_status === "matched");
-  const partial = classified.filter((card) => card.match_status === "partial");
-  const lines: string[] = [];
-
-  if (matched.length) {
-    lines.push(`조건을 모두 충족한 대학은 **${matched.length}곳**입니다.`);
-    lines.push(...matched.map((card) => `- ${card.university_name}`));
-  } else {
-    lines.push("현재 등록된 자료에서 모든 조건을 확인하고 충족한 대학은 없습니다.");
-  }
-
-  if (partial.length) {
-    lines.push("", `추가로 **${partial.length}곳**은 일부 조건 확인이 필요합니다. 상세 결과에서 확인해 주세요.`);
-  }
-
-  return lines.join("\n");
-}
-
 export function deterministicDeadlineAnswer(cards: ResultCard[]) {
   const rows = cards.map((card, index) => {
     const deadlineFacts = (card.fact_bundle ?? [])

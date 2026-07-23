@@ -12,9 +12,10 @@
     "dev:sites": "vinext dev",
     "build:sites": "vinext build",
     "start:sites": "vinext start",
-    "test": "npm run test:presenter && npm run test:chat",
+    "test": "npm run test:presenter && npm run test:chat && npm run test:reasoner",
     "test:presenter": "node --experimental-strip-types --test tests/present-fact.golden.test.ts",
     "test:chat": "node --experimental-strip-types --test tests/chat-policy.test.ts",
+    "test:reasoner": "node --experimental-strip-types --test tests/reasoner-validation.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

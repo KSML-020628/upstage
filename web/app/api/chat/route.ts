@@ -15,11 +15,11 @@ import {
   deterministicRestrictionAnswer,
   collectSources,
   restrictionEvidence,
-  authoritativeFactsSummary,
   responsePresentation,
   sanitizeGeneratedAnswer,
   searchMode,
 } from "../../lib/chat/answers";
+import { composeShortAnswer } from "../../lib/chat/short-answer";
 import {
   detectConstraints,
   detectConversationConstraints,
@@ -98,8 +98,6 @@ function isRateLimited(request: Request) {
   return bucket.count > RATE_LIMIT_REQUESTS;
 }
 
-type ShortAnswerSource = "solar_reasoner" | "server_plus_solar" | "authoritative_template" | "deterministic_fallback" | "override";
-
 async function v2Response(args: {
   requestId: string;
   question: string;
@@ -145,35 +143,12 @@ async function v2Response(args: {
     };
   });
 
-  const factualHeader = authoritativeFactsSummary(cardsWithExplanation);
-  // CLAUDE.md: partially_matched university names must never appear in
-  // shortAnswer, only their count -- but Solar's free-form narrative isn't
-  // aware of that display rule and will happily name them (it did, in QA:
-  // "...IELTS 6.5, GPA 3.0/4.5 ... ICN Business School(프랑스), ..." for a
-  // partial-only candidate). Only splice the narrative in when there are no
-  // partial matches for it to leak.
-  const hasPartialMatches = cardsWithExplanation.some((card) => card.match_status === "partial");
-  const safeNarrative = hasPartialMatches ? "" : narrative;
-  let shortAnswer: string;
-  let shortAnswerSource: ShortAnswerSource;
-  if (args.shortAnswerOverride) {
-    shortAnswer = args.shortAnswerOverride;
-    shortAnswerSource = "override";
-  } else if (factualHeader) {
-    // Classified (recommendation-type) query: combine the server's factual
-    // header with Solar's own validated narrative instead of the header
-    // unconditionally replacing it -- previously the reasoner's shortAnswer
-    // was computed and validated here and then discarded outright for every
-    // classified query, regardless of whether it was good.
-    shortAnswer = safeNarrative ? `${factualHeader}\n\n${safeNarrative}` : factualHeader;
-    shortAnswerSource = safeNarrative ? "server_plus_solar" : "authoritative_template";
-  } else if (narrative) {
-    shortAnswer = narrative;
-    shortAnswerSource = "solar_reasoner";
-  } else {
-    shortAnswer = presentation.shortAnswer;
-    shortAnswerSource = "deterministic_fallback";
-  }
+  const { shortAnswer, source: shortAnswerSource } = composeShortAnswer({
+    cards: cardsWithExplanation,
+    narrative,
+    shortAnswerOverride: args.shortAnswerOverride,
+    deterministicShortAnswer: presentation.shortAnswer,
+  });
 
   console.info("[chat-v2] pipeline", {
     planner: args.planner.usedSolar,
@@ -184,13 +159,21 @@ async function v2Response(args: {
     reasoner: reasoner.usedSolar,
     reasonerIssues: reasoner.issues,
   });
+  // Split into three distinct observability signals instead of one
+  // "reasonerDisplayed" bit -- they can legitimately disagree (e.g. Solar's
+  // free-text narrative gets suppressed by a partial-match name-leak guard
+  // while per-university explanations still attach fine, or a validated
+  // explanation is attached but its card falls outside this response's final
+  // card set), and collapsing them hid which stage actually lost the value.
+  const attachedRecommendationCount = reasoner.output?.recommendations.filter((item) => item.explanation).length ?? 0;
   console.info("[chat-v2] short-answer-source", {
     requestId: args.requestId,
     source: shortAnswerSource,
     reasonerCalled: args.runReasoner && Boolean(apiKey),
     reasonerAccepted: reasoner.usedSolar,
-    reasonerDisplayed: shortAnswerSource === "server_plus_solar" || shortAnswerSource === "solar_reasoner",
-    explanationsAttached: cardsWithExplanation.filter((card) => card.ai_explanation).length,
+    shortNarrativeDisplayed: shortAnswerSource === "server_plus_solar" || shortAnswerSource === "solar_reasoner",
+    cardExplanationsAttached: attachedRecommendationCount,
+    cardExplanationsDisplayed: cardsWithExplanation.filter((card) => card.ai_explanation).length,
   });
 
   return NextResponse.json({
@@ -483,6 +466,9 @@ async function handleChatRequest(request: Request) {
       const shortAnswer = sources.length
         ? sources.slice(0, 3).map((source) => `- [${source.university_name || source.title} 공식 출처](${source.url})`).join("\n")
         : "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다.";
+      // shortAnswerOverride always wins in composeShortAnswer, so the
+      // reasoner's narrative can never surface here -- calling it anyway
+      // would just be a wasted Solar round-trip for a pure source lookup.
       return v2Response({
         question,
         cards,
@@ -491,7 +477,7 @@ async function handleChatRequest(request: Request) {
         planner,
         factTablesDegraded,
         requestId,
-        runReasoner,
+        runReasoner: false,
         extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
       });
     }
