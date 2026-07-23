@@ -1,6 +1,24 @@
 import { parseDeadlineDateConstraint } from "./chat-policy";
-import type { ChatMessage, Intent, LanguageTestName, QueryConstraints, QuotaMode } from "./types";
+import type { ChatMessage, ClearableConditionField, Intent, LanguageTestName, QueryConstraints, QuotaMode } from "./types";
 import { detectCountries, detectExcludedCountries, includesAny, normalizeSearchText } from "./utils";
+
+// A follow-up like "어학 성적이 필요 없는 곳은?" after a turn that set
+// languageScore=6.0 must actually drop that condition, not just fail to
+// restate it -- mergeConversationConstraints's `current.X ?? base.X` falls
+// back to the old value precisely when the new turn doesn't mention X again,
+// which is indistinguishable from "doesn't need X anymore" unless something
+// says so explicitly. This detects that explicit signal per condition group.
+function detectExplicitConditionClears(question: string): ClearableConditionField[] {
+  const text = question.normalize("NFKC").toLowerCase();
+  const cleared: ClearableConditionField[] = [];
+  if (/(?:어학|영어|언어|ielts|toefl)[^\n]{0,12}(?:상관없|무관|필요\s*없|없어도|안\s*내도|점수\s*없이)/i.test(text)) cleared.push("language");
+  if (/(?:학점|평점|gpa)[^\n]{0,12}(?:상관없|무관|필요\s*없|없어도)/i.test(text)) cleared.push("gpa");
+  if (/전공[^\n]{0,12}(?:상관없|무관|필요\s*없)/i.test(text)) cleared.push("major");
+  if (/기숙사[^\n]{0,12}(?:상관없|무관)/i.test(text)) cleared.push("housing");
+  if (/(?:예산|비용)[^\n]{0,12}(?:상관없|무관)/i.test(text)) cleared.push("budget");
+  if (/(?:정원|quota)[^\n]{0,12}(?:상관없|무관)/i.test(text)) cleared.push("quota");
+  return cleared;
+}
 
 export function detectIntent(question: string): Intent {
   const rawText = question.normalize("NFKC").toLowerCase();
@@ -224,6 +242,7 @@ export function detectConstraints(question: string): QueryConstraints {
     deadlineDate: deadlineDateConstraint?.date,
     unsupportedReason: costOfLivingIndexQuestion ? "cost_of_living_index" as const : undefined,
     requestedFields,
+    explicitClears: detectExplicitConditionClears(question),
   };
 
   return {
@@ -253,23 +272,30 @@ export function detectConstraints(question: string): QueryConstraints {
 // only restores conditions like score/GPA/major/housing/deadline that
 // otherwise silently reset every turn.
 export function mergeConversationConstraints(base: QueryConstraints, current: QueryConstraints): QueryConstraints {
+  // "그중 어학 성적이 필요 없는 곳은?" must actually drop a previously-set
+  // languageScore, not just fail to restate it -- the `current.X ?? base.X`
+  // fallbacks below can't tell "this turn didn't mention X" apart from "this
+  // turn explicitly wants X gone" on their own, so explicitClears (detected
+  // above, from the *current* turn's own text) decides per condition group
+  // whether the old value is even eligible to carry forward.
+  const cleared = new Set(current.explicitClears);
   return {
     ...current,
-    languageTest: current.languageTest ?? base.languageTest,
-    languageScore: current.languageScore ?? base.languageScore,
-    languageSubscore: current.languageSubscore ?? base.languageSubscore,
-    gpa: current.gpa ?? base.gpa,
-    major: current.major ?? base.major,
-    budgetKrwSemester: current.budgetKrwSemester ?? base.budgetKrwSemester,
-    quotaMin: current.quotaMin ?? base.quotaMin,
-    quotaMode: current.quotaMode ?? base.quotaMode,
+    languageTest: cleared.has("language") ? undefined : current.languageTest ?? base.languageTest,
+    languageScore: cleared.has("language") ? undefined : current.languageScore ?? base.languageScore,
+    languageSubscore: cleared.has("language") ? undefined : current.languageSubscore ?? base.languageSubscore,
+    gpa: cleared.has("gpa") ? undefined : current.gpa ?? base.gpa,
+    major: cleared.has("major") ? undefined : current.major ?? base.major,
+    budgetKrwSemester: cleared.has("budget") ? undefined : current.budgetKrwSemester ?? base.budgetKrwSemester,
+    quotaMin: cleared.has("quota") ? undefined : current.quotaMin ?? base.quotaMin,
+    quotaMode: cleared.has("quota") ? undefined : current.quotaMode ?? base.quotaMode,
     deadlineAcademicYear: current.deadlineAcademicYear ?? base.deadlineAcademicYear,
     deadlineSemester: current.deadlineSemester ?? base.deadlineSemester,
     deadlineType: current.deadlineType ?? base.deadlineType,
     deadlineComparator: current.deadlineComparator ?? base.deadlineComparator,
     deadlineDate: current.deadlineDate ?? base.deadlineDate,
-    requireHousing: current.requireHousing || base.requireHousing,
-    requireHousingGuaranteed: current.requireHousingGuaranteed || base.requireHousingGuaranteed,
+    requireHousing: cleared.has("housing") ? false : (current.requireHousing || base.requireHousing),
+    requireHousingGuaranteed: cleared.has("housing") ? false : (current.requireHousingGuaranteed || base.requireHousingGuaranteed),
     requireHousingMissing: current.requireHousingMissing || base.requireHousingMissing,
   };
 }

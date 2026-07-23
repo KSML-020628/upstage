@@ -92,6 +92,13 @@ export type QuotaMode = "minimum" | "exists" | "missing" | "sort_desc";
 export type DeadlineSemester = "autumn" | "spring";
 export type DeadlineType = "application" | "nomination";
 
+// A condition group a follow-up turn can explicitly ask to drop (e.g. "어학
+// 성적 상관없이" after a prior turn set an IELTS score). Carried on the
+// *current* turn's constraints, consumed by mergeConversationConstraints --
+// see its comment for why "not mentioned this turn" and "explicitly asked
+// to remove this turn" have to be distinguishable at all.
+export type ClearableConditionField = "language" | "gpa" | "major" | "housing" | "budget" | "quota";
+
 export type QueryConstraints = {
   intent: Intent;
   topN: number;
@@ -129,6 +136,7 @@ export type QueryConstraints = {
   deadlineDate?: string;
   unsupportedReason?: "cost_of_living_index";
   requestedFields: string[];
+  explicitClears: ClearableConditionField[];
 };
 
 export type CostComponent = {

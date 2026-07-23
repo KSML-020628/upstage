@@ -471,13 +471,25 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          const event = JSON.parse(line) as { type?: string; stage?: string; message?: string; data?: ApiResult };
+          const event = JSON.parse(line) as { type?: string; stage?: string; message?: string; status?: number; data?: ApiResult };
           if (event.type === "status") {
             if (requestSequence !== requestSequenceRef.current) return;
             const stageIndex = ["planning", "searching", "validating", "reasoning"].indexOf(event.stage ?? "");
             if (stageIndex >= 0) setLoadingStage(stageIndex);
           }
-          if (event.type === "result" && event.data) result = event.data;
+          if (event.type === "result") {
+            // The stream wrapper (app/api/chat/route.ts's POST) always
+            // responds 200 at the HTTP level -- the real status from
+            // handleChatRequest (e.g. 429 rate limit, 400 bad request) only
+            // ever appears in this "result" event's own `status` field. Not
+            // checking it here meant a rate-limit/validation error's message
+            // just got shown as if it were a normal answer, with a "상세
+            // 결과 보기" button pointing at empty cards/sources.
+            if ((event.status ?? 200) >= 400) {
+              throw new Error(event.data?.error || "요청 처리 중 오류가 발생했습니다.");
+            }
+            if (event.data) result = event.data;
+          }
           if (event.type === "error") throw new Error(event.message || "챗봇 요청에 실패했습니다.");
         }
       }
@@ -486,13 +498,18 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
       const sources = result.sources ?? [];
       const detailedAnswer = result.detailedAnswer || result.answer || result.error || "답변을 불러오지 못했습니다.";
       const shortAnswer = result.shortAnswer || shortAnswerFromResult(detailedAnswer, cards);
-      const nextDetail: ChatDetailResponse = {
-        question: content,
-        detailedAnswer,
-        cards,
-        sources,
-        createdAt: new Date(),
-      };
+      // No detail button for an answer that has nothing to show in it (e.g.
+      // an out-of-scope rejection or a clarification prompt) -- those return
+      // cards: [] and sources: [] on purpose, not as an incomplete result.
+      const nextDetail: ChatDetailResponse | undefined = cards.length || sources.length
+        ? {
+            question: content,
+            detailedAnswer,
+            cards,
+            sources,
+            createdAt: new Date(),
+          }
+        : undefined;
 
       if (requestSequence !== requestSequenceRef.current) return;
       setMessages((current) => [
@@ -510,11 +527,17 @@ export function ChatbotWidget({ mode = "floating" }: ChatbotWidgetProps) {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       if (requestSequence !== requestSequenceRef.current) return;
+      // Prefer the server's own message (e.g. the 429 rate-limit text, or a
+      // validation error) over a generic network message -- those are real,
+      // specific responses, not connectivity failures.
+      const errorMessageText = error instanceof Error && error.message
+        ? error.message
+        : "네트워크 연결을 확인한 뒤 다시 질문해 주세요.";
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
-          content: "네트워크 연결을 확인한 뒤 다시 질문해 주세요.",
+          content: errorMessageText,
         },
       ]);
     } finally {

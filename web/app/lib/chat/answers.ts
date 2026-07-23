@@ -249,11 +249,17 @@ export function deterministicDeadlineAnswer(cards: ResultCard[]) {
   return [
     "### 지원 마감일 비교",
     "",
-    "| 순위 | 대학 | 위치 | 가장 빠른 등록 마감일 | 함께 확인할 일정 |",
+    // The cell content itself already says which deadline this is (e.g.
+    // "2026년 봄학기 · 지명(성균관대 추천) 마감일: ..."), since a university can
+    // have both a nomination and an application deadline and this shows
+    // whichever comes first chronologically -- the header must not call it
+    // "the" application deadline as if there's only one kind.
+    "| 순위 | 대학 | 위치 | 가장 빠른 확인된 마감일 | 함께 확인할 일정 |",
     "|---|---|---|---|---|",
     ...rows,
     "",
     "### 확인사항",
+    "- 지명(성균관대 추천) 마감일과 지원(본인 제출) 마감일은 서로 다른 절차이며, 위 표는 둘 중 더 빠른 날짜를 보여줍니다.",
     "- 성균관대학교 내부 접수 일정과 상대교 일정은 다를 수 있습니다.",
     "- 실제 지원 전 아래 공식 출처에서 최신 일정을 확인해 주세요.",
   ].join("\n");

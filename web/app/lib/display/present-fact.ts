@@ -200,9 +200,19 @@ export function presentLanguage(row: FactRow): PresentedField {
   return { ...base, label: language || "어학 조건", status: score !== undefined || cefr ? rowStatus(row) : "unknown", value: parts.join(" · ") };
 }
 
+const DEADLINE_TYPE_LABELS_KO: Record<string, string> = {
+  nomination: "지명(성균관대 추천) 마감일",
+  application: "지원(본인 제출) 마감일",
+};
+
 export function presentDeadline(row: FactRow): PresentedField {
   const semester = compactText(row.semester);
-  const type = compactText(row.deadline_type) || "마감일";
+  const rawType = compactText(row.deadline_type);
+  // Distinguishes who acts on this date -- nomination is SKKU recommending
+  // the student to the partner university; application is the student's own
+  // document submission. Conflating the two under one generic "마감일" label
+  // (the previous behavior) could point a student at the wrong deadline.
+  const type = DEADLINE_TYPE_LABELS_KO[rawType.toLowerCase()] ?? rawType ?? "마감일";
   const date = compactText(row.deadline_date || row.date || row.deadline_text);
   const label = [semester, type].filter(Boolean).join(" · ");
   const base = baseField(row, "deadline", label);
