@@ -171,6 +171,10 @@ function gpaMatches(university: University, skkuGpa: number) {
   return (skkuGpa / 4.5) * scale >= required;
 }
 
+function normalizeSearchText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 export function UniversityResults({ universities }: { universities: University[] }) {
   const params = useSearchParams();
   const [continents, setContinents] = useState((params.get("countries") ?? "").split(",").filter(Boolean));
@@ -179,6 +183,7 @@ export function UniversityResults({ universities }: { universities: University[]
   const [languageTest, setLanguageTest] = useState(params.get("languageTest") ?? "");
   const [languageScore, setLanguageScore] = useState(Number(params.get("languageScore") ?? 0));
   const [gpa, setGpa] = useState(Number(params.get("gpa") ?? 3.5));
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -190,18 +195,23 @@ export function UniversityResults({ universities }: { universities: University[]
     setLanguageTest("");
     setLanguageScore(0);
     setGpa(3.5);
+    setSearchQuery("");
   };
 
-  const filtered = useMemo(() => universities.filter((item) => {
-    const continentMatch = !continents.length || continents.some((group) => (continentGroups[group] ?? [group]).includes(item.country));
-    const requirements = item.exchange_programs?.[0]?.language_requirements ?? [];
-    const matching = languageTest ? requirements.filter((row) => matchesTest(row.test_type, languageTest)) : [];
-    const languageMatch = !languageTest || (matching.length > 0 && matching.some((row) => {
-      const required = toNumber(row.minimum_score ?? row.overall_score);
-      return required !== null && languageScore >= required;
-    }));
-    return continentMatch && languageMatch && semesterMatches(item, semester) && majorMatches(item, major) && gpaMatches(item, gpa);
-  }), [universities, continents, major, semester, languageTest, languageScore, gpa]);
+  const filtered = useMemo(() => {
+    const query = normalizeSearchText(searchQuery.trim());
+    return universities.filter((item) => {
+      const nameMatch = !query || normalizeSearchText(item.university_name).includes(query);
+      const continentMatch = !continents.length || continents.some((group) => (continentGroups[group] ?? [group]).includes(item.country));
+      const requirements = item.exchange_programs?.[0]?.language_requirements ?? [];
+      const matching = languageTest ? requirements.filter((row) => matchesTest(row.test_type, languageTest)) : [];
+      const languageMatch = !languageTest || (matching.length > 0 && matching.some((row) => {
+        const required = toNumber(row.minimum_score ?? row.overall_score);
+        return required !== null && languageScore >= required;
+      }));
+      return nameMatch && continentMatch && languageMatch && semesterMatches(item, semester) && majorMatches(item, major) && gpaMatches(item, gpa);
+    });
+  }, [universities, searchQuery, continents, major, semester, languageTest, languageScore, gpa]);
 
   const toggleCompare = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
 
@@ -220,6 +230,10 @@ export function UniversityResults({ universities }: { universities: University[]
         {semester !== "all" && <b>{semesterLabels[semester]}</b>}
         {languageTest && <b>{languageTest} {languageScore}</b>}
         <b>GPA {gpa.toFixed(2)} / 4.5</b>
+        <label className="university-search">
+          <span className="sr-only">대학명 검색</span>
+          <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="대학명을 입력해 검색하세요" autoComplete="off" />
+        </label>
         <button className="edit-filter" onClick={() => setFilterOpen(!filterOpen)}>{filterOpen ? "조건 닫기" : "조건 수정"}</button>
         <button className="reset-filter" onClick={reset}>전체 초기화</button>
       </section>
