@@ -15,7 +15,7 @@ import {
   deterministicRestrictionAnswer,
   collectSources,
   restrictionEvidence,
-  authoritativeShortAnswer,
+  authoritativeFactsSummary,
   responsePresentation,
   sanitizeGeneratedAnswer,
   searchMode,
@@ -98,12 +98,16 @@ function isRateLimited(request: Request) {
   return bucket.count > RATE_LIMIT_REQUESTS;
 }
 
+type ShortAnswerSource = "solar_reasoner" | "server_plus_solar" | "authoritative_template" | "deterministic_fallback" | "override";
+
 async function v2Response(args: {
+  requestId: string;
   question: string;
   cards: ResultCard[];
   detailedAnswer: string;
   planner: PlannerRun;
   factTablesDegraded: boolean;
+  runReasoner: boolean;
   shortAnswerOverride?: string;
   extra?: Record<string, unknown>;
 }) {
@@ -111,17 +115,65 @@ async function v2Response(args: {
   const model = process.env.UPSTAGE_CHAT_MODEL || "solar-pro3";
   const evidenceCards = args.cards.map((card) => ({ ...card, match_status: card.match_status ?? "matched" as const }));
   const packet = createEvidencePacket(args.question, args.planner.validatedPlan, evidenceCards);
-  const reasoner = apiKey
+  // Simple single-target lookups ("Sheffield IELTS 몇점이야?") don't need the
+  // reasoner's comparative narrative -- the deterministic template already
+  // says everything there is to say, so skip a Solar call (and its latency)
+  // that would only ever get discarded. See docs/decisions.md.
+  const reasoner = apiKey && args.runReasoner
     ? await runSolarReasoner({ apiKey, model, packet, reasoningEffort: resolveReasoningEffort() })
-    : { output: null, usedSolar: false, issues: ["missing_api_key"] };
+    : { output: null, usedSolar: false, issues: [apiKey ? "reasoner_not_needed" : "missing_api_key"] };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
   // Only the reasoner's own text needs this pass -- presentation.shortAnswer
   // is always a deterministic template and never contains a placeholder like
   // "XXX"/"TBD" to begin with.
-  const modelShortAnswer = reasoner.output?.shortAnswer
-    ? sanitizeGeneratedAnswer(reasoner.output.shortAnswer) || presentation.shortAnswer
-    : presentation.shortAnswer;
-  const shortAnswer = args.shortAnswerOverride ?? authoritativeShortAnswer(args.cards, modelShortAnswer);
+  const narrative = reasoner.output?.shortAnswer ? sanitizeGeneratedAnswer(reasoner.output.shortAnswer) : "";
+
+  // Each recommendation was already validated in reasoner.ts (schema-shaped,
+  // reasonFactIds/cautionFactIds filtered to that university's own fact IDs,
+  // explanation checked for ungrounded numbers/URLs) -- it was computed and
+  // then never read past that point. Attach it to the matching card here so
+  // it actually reaches the detail view instead of being silently discarded.
+  const explanationByUniversityId = new Map((reasoner.output?.recommendations ?? []).map((item) => [item.universityId, item]));
+  const cardsWithExplanation = args.cards.map((card) => {
+    const recommendation = explanationByUniversityId.get(card.university_id);
+    if (!recommendation?.explanation) return card;
+    return {
+      ...card,
+      ai_explanation: recommendation.explanation,
+      explanation_fact_ids: recommendation.reasonFactIds,
+      caution_fact_ids: recommendation.cautionFactIds,
+    };
+  });
+
+  const factualHeader = authoritativeFactsSummary(cardsWithExplanation);
+  // CLAUDE.md: partially_matched university names must never appear in
+  // shortAnswer, only their count -- but Solar's free-form narrative isn't
+  // aware of that display rule and will happily name them (it did, in QA:
+  // "...IELTS 6.5, GPA 3.0/4.5 ... ICN Business School(프랑스), ..." for a
+  // partial-only candidate). Only splice the narrative in when there are no
+  // partial matches for it to leak.
+  const hasPartialMatches = cardsWithExplanation.some((card) => card.match_status === "partial");
+  const safeNarrative = hasPartialMatches ? "" : narrative;
+  let shortAnswer: string;
+  let shortAnswerSource: ShortAnswerSource;
+  if (args.shortAnswerOverride) {
+    shortAnswer = args.shortAnswerOverride;
+    shortAnswerSource = "override";
+  } else if (factualHeader) {
+    // Classified (recommendation-type) query: combine the server's factual
+    // header with Solar's own validated narrative instead of the header
+    // unconditionally replacing it -- previously the reasoner's shortAnswer
+    // was computed and validated here and then discarded outright for every
+    // classified query, regardless of whether it was good.
+    shortAnswer = safeNarrative ? `${factualHeader}\n\n${safeNarrative}` : factualHeader;
+    shortAnswerSource = safeNarrative ? "server_plus_solar" : "authoritative_template";
+  } else if (narrative) {
+    shortAnswer = narrative;
+    shortAnswerSource = "solar_reasoner";
+  } else {
+    shortAnswer = presentation.shortAnswer;
+    shortAnswerSource = "deterministic_fallback";
+  }
 
   console.info("[chat-v2] pipeline", {
     planner: args.planner.usedSolar,
@@ -132,12 +184,20 @@ async function v2Response(args: {
     reasoner: reasoner.usedSolar,
     reasonerIssues: reasoner.issues,
   });
+  console.info("[chat-v2] short-answer-source", {
+    requestId: args.requestId,
+    source: shortAnswerSource,
+    reasonerCalled: args.runReasoner && Boolean(apiKey),
+    reasonerAccepted: reasoner.usedSolar,
+    reasonerDisplayed: shortAnswerSource === "server_plus_solar" || shortAnswerSource === "solar_reasoner",
+    explanationsAttached: cardsWithExplanation.filter((card) => card.ai_explanation).length,
+  });
 
   return NextResponse.json({
     ...presentation,
     shortAnswer,
-    cards: args.cards,
-    sources: collectSources(args.cards),
+    cards: cardsWithExplanation,
+    sources: collectSources(cardsWithExplanation),
     unknown_fields: packet.unknownFields,
     suggestedDetailTab: reasoner.output?.suggestedDetailTab,
     solarUsed: { planner: args.planner.usedSolar, reasoner: reasoner.usedSolar },
@@ -362,6 +422,13 @@ async function handleChatRequest(request: Request) {
       matchedIds: classified?.matched.map((card) => card.university_id) ?? [],
       partialIds: classified?.partiallyMatched.map((card) => card.university_id) ?? [],
     });
+    // A single-target direct lookup ("Sheffield IELTS 몇점이야?") has nothing
+    // for the reasoner to compare or synthesize -- the deterministic template
+    // already says everything there is to say, so skip a Solar call whose
+    // narrative would only ever be discarded. Multi-card results, genuinely
+    // conditional searches, and follow-ups (which often revisit/narrow a
+    // multi-card set) are exactly the cases with something worth explaining.
+    const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
     if (!cards.length) {
       return NextResponse.json({
         answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
@@ -393,6 +460,8 @@ async function handleChatRequest(request: Request) {
         detailedAnswer,
         planner,
         factTablesDegraded,
+        requestId,
+        runReasoner,
         extra: {
           matched: classified.matched,
           partially_matched: classified.partiallyMatched,
@@ -421,6 +490,8 @@ async function handleChatRequest(request: Request) {
         shortAnswerOverride: shortAnswer,
         planner,
         factTablesDegraded,
+        requestId,
+        runReasoner,
         extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
       });
     }
@@ -428,7 +499,7 @@ async function handleChatRequest(request: Request) {
     if (constraints.requestedFields.length > 1) {
       const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
       return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded,
+        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
         extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
       });
     }
@@ -436,7 +507,7 @@ async function handleChatRequest(request: Request) {
     if (intent === "cost") {
       const detailedAnswer = deterministicDirectCostAnswer(cards);
       return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded,
+        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
         extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
       });
     }
@@ -444,7 +515,7 @@ async function handleChatRequest(request: Request) {
     if (intent === "deadline") {
       const detailedAnswer = deterministicDeadlineAnswer(cards);
       return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded,
+        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
         extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
       });
     }
@@ -454,7 +525,7 @@ async function handleChatRequest(request: Request) {
       const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
       const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
       return v2Response({
-        question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded,
+        question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
         extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
       });
     }
@@ -462,13 +533,13 @@ async function handleChatRequest(request: Request) {
     if (intent === "housing" || intent === "language") {
       const detailedAnswer = deterministicFactAnswer(cards, intent);
       return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded,
+        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
         extra: { searchMode: searchMode(intent) },
       });
     }
     const detailedAnswer = deterministicGeneralAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
       extra: { searchMode: searchMode(intent) },
     });
   } catch (error) {

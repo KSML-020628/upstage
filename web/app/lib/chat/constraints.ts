@@ -122,7 +122,12 @@ export function detectQuotaMode(question: string, quotaMin?: number): QuotaMode 
 
 export function detectMajor(question: string) {
   const text = normalizeSearchText(question);
-  if (/컴퓨터|소프트웨어|software|computer|cs|공학|engineering|it/.test(text)) return "engineering";
+  // "cs"/"it" as bare alternatives without word boundaries matched as
+  // substrings of unrelated words -- e.g. "university" contains "it"
+  // ("univers-it-y"), so any English university name falsely set major to
+  // "engineering" and made hasRecommendationConditions() true for plain
+  // single-university lookups that never mentioned a major at all.
+  if (/컴퓨터|소프트웨어|software|computer|공학|engineering|\bcs\b|\bit\b/.test(text)) return "engineering";
   if (/경영|경제|business|management|economics/.test(text)) return "business";
   if (/인문|사회|humanities|social/.test(text)) return "humanities";
   if (/자연과학|과학|science|biology|chemistry|physics/.test(text)) return "science";

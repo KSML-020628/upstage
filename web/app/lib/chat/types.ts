@@ -69,6 +69,13 @@ export type ResultCard = {
   match_status?: "matched" | "partial";
   condition_checks?: ConditionCheck[];
   unknown_fields?: string[];
+  // Populated from the (already schema-validated, fact-ID-checked) Solar
+  // reasoner's per-university recommendation, when one exists for this card.
+  // Purely additive commentary alongside the server-determined facts above --
+  // never a substitute for them. See app/api/chat/route.ts's v2Response.
+  ai_explanation?: string;
+  explanation_fact_ids?: string[];
+  caution_fact_ids?: string[];
 };
 
 export type ConditionState = "met" | "unknown" | "failed";

@@ -34,6 +34,7 @@ export type ChatResultCard = {
   match_status?: "matched" | "partial";
   condition_checks?: Array<{ key: string; label: string; state: "met" | "unknown" | "failed"; detail: string }>;
   unknown_fields?: string[];
+  ai_explanation?: string;
 };
 
 type Message = {
@@ -331,6 +332,11 @@ export function ResultCards({
           </ul>
           {!!card.unknown_fields?.length && (
             <p className="chat-card-unknown">미확인: {card.unknown_fields.join(", ")}</p>
+          )}
+          {card.ai_explanation && (
+            <p className="chat-card-ai-explanation">
+              <b>AI 분석</b> {card.ai_explanation}
+            </p>
           )}
           {card.source_url && (
             <a className="chat-card-source" href={card.source_url} target="_blank" rel="noreferrer">

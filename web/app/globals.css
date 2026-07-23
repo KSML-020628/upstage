@@ -203,6 +203,8 @@ button,input,select { font:inherit; }
 .chat-match-status.matched { background:#e5f7ee; color:#14734b; }
 .chat-match-status.partial { background:#fff0bf; color:#8a5a00; }
 .chat-card-unknown { margin:8px 0 0 !important; padding:7px 8px; border-radius:7px; background:#fff3cf; color:#78520b !important; font-size:9px !important; font-weight:800; }
+.chat-card-ai-explanation { margin:8px 0 0 !important; padding:8px 10px; border-radius:7px; background:#eef3fc; color:var(--ink) !important; font-size:11px !important; font-weight:500 !important; line-height:1.5; }
+.chat-card-ai-explanation b { color:var(--blue); font-size:9px; font-weight:800; text-transform:uppercase; margin-right:5px; }
 .chat-result-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .chat-result-card-head b { display:block; color:#10243f; font-size:12px; line-height:1.25; }
 .chat-result-card-head span { display:block; margin-top:3px; color:#728095; font-size:9px; }
