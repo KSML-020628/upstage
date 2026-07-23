@@ -215,9 +215,18 @@ function normalizeQuotaFact(row: Record<string, unknown>) {
   };
 }
 
-async function getFactTableBundles(universities: University[]) {
+async function getFactTableBundles(universities: University[]): Promise<{ bundles: Map<string, FactTableBundle>; degraded: boolean }> {
   const key = supabaseServerKey();
-  if (!key) return new Map<string, FactTableBundle>();
+  if (!key) {
+    // Without this key, every answer silently falls back to the thinner
+    // ui_profile_json rows on getUniversities() instead of the richer
+    // cost_facts/housing_facts/language_requirements/application_deadlines
+    // tables -- previously this returned an empty map with no log at all, so
+    // a missing key in a deployment env was invisible until someone noticed
+    // answers were thinner than expected.
+    console.warn("SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY/SUPABASE_KEY) is not set -- /api/chat is running on ui_profile_json only, without the structured fact tables");
+    return { bundles: new Map<string, FactTableBundle>(), degraded: true };
+  }
   const ids = universities.map((university) => university.id);
   try {
     const [costRows, housingRows, languageRows, deadlineRows] = await Promise.all([
@@ -266,10 +275,10 @@ async function getFactTableBundles(universities: University[]) {
         quotas: (quotas.get(university.id) ?? []).map(normalizeQuotaFact),
       });
     }
-    return bundles;
+    return { bundles, degraded: false };
   } catch (error) {
     console.error("Supabase fact-table fetch failed; using ui_profile_json rows", error);
-    return new Map<string, FactTableBundle>();
+    return { bundles: new Map<string, FactTableBundle>(), degraded: true };
   }
 }
 
@@ -291,8 +300,11 @@ function withFactTableRows(university: University, bundle?: FactTableBundle): Un
   };
 }
 
-export async function getChatUniversities() {
+export async function getChatUniversities(): Promise<{ universities: University[]; factTablesDegraded: boolean }> {
   const universities = await getUniversities();
-  const bundles = await getFactTableBundles(universities);
-  return universities.map((university) => withFactTableRows(university, bundles.get(university.id)));
+  const { bundles, degraded } = await getFactTableBundles(universities);
+  return {
+    universities: universities.map((university) => withFactTableRows(university, bundles.get(university.id))),
+    factTablesDegraded: degraded,
+  };
 }

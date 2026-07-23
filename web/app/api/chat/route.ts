@@ -26,7 +26,7 @@ import {
   isCostOfLivingIndexQuestion,
   isRemovedCostRecommendation,
 } from "../../lib/chat/constraints";
-import { applyValidatedPlannerPlan, followupOrdinal, plannerDifferences, resolveReasoningEffort } from "../../lib/chat/planner-integration";
+import { applyValidatedPlannerPlan, followupOrdinal, plannerDifferences, resolvePlannerMode, resolveReasoningEffort } from "../../lib/chat/planner-integration";
 import {
   costOfLivingResponse,
   describeConditionsForClarification,
@@ -96,6 +96,7 @@ async function v2Response(args: {
   cards: ResultCard[];
   detailedAnswer: string;
   planner: PlannerRun;
+  factTablesDegraded: boolean;
   shortAnswerOverride?: string;
   extra?: Record<string, unknown>;
 }) {
@@ -117,7 +118,7 @@ async function v2Response(args: {
 
   console.info("[chat-v2] pipeline", {
     planner: args.planner.usedSolar,
-    plannerMode: process.env.SOLAR_PLANNER_MODE || "shadow",
+    plannerMode: resolvePlannerMode(),
     plannerIssues: args.planner.issues,
     evidenceUniversities: packet.universities.length,
     evidenceFacts: packet.universities.reduce((sum, item) => sum + item.facts.length, 0),
@@ -133,8 +134,9 @@ async function v2Response(args: {
     unknown_fields: packet.unknownFields,
     suggestedDetailTab: reasoner.output?.suggestedDetailTab,
     solarUsed: { planner: args.planner.usedSolar, reasoner: reasoner.usedSolar },
-    plannerMode: (process.env.SOLAR_PLANNER_MODE || "shadow") === "active" ? "active" : "shadow",
+    plannerMode: resolvePlannerMode(),
     fallbackUsed: !reasoner.usedSolar,
+    factTablesDegraded: args.factTablesDegraded,
     pipelineStages: ["planning", "searching", "validating", "reasoning"],
     ...args.extra,
   });
@@ -174,8 +176,11 @@ async function handleChatRequest(request: Request) {
   if (isPromptInjectionRequest(question)) return safePromptInjectionResponse();
 
   try {
-    const universities = await getChatUniversities();
+    const { universities, factTablesDegraded } = await getChatUniversities();
     const requestId = crypto.randomUUID().slice(0, 8);
+    if (factTablesDegraded) {
+      console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
+    }
     if (isCostOfLivingIndexQuestion(question)) return costOfLivingResponse(question);
     // Product policy must win even when the active planner classifies the
     // question as out of scope or changes its intent.
@@ -194,7 +199,8 @@ async function handleChatRequest(request: Request) {
       ? { ...detectedConstraints, inScope: true }
       : detectedConstraints;
     const apiKey = process.env.UPSTAGE_API_KEY;
-    const planner: PlannerRun = apiKey && legacyConstraints.inScope
+    const plannerMode = resolvePlannerMode();
+    const planner: PlannerRun = apiKey && legacyConstraints.inScope && plannerMode === "active"
       ? await runSolarPlanner({
           apiKey,
           model: process.env.UPSTAGE_CHAT_MODEL || "solar-pro3",
@@ -202,14 +208,19 @@ async function handleChatRequest(request: Request) {
           knownUniversityNames: universities.map((university) => university.university_name),
           reasoningEffort: resolveReasoningEffort(),
         })
-      : { rawPlan: null, validatedPlan: null, issues: [apiKey ? "out_of_scope" : "missing_api_key"], usedSolar: false };
-    const constraints = (process.env.SOLAR_PLANNER_MODE || "shadow") === "active"
+      : {
+          rawPlan: null,
+          validatedPlan: null,
+          issues: [!apiKey ? "missing_api_key" : plannerMode !== "active" ? "shadow_mode_skipped" : "out_of_scope"],
+          usedSolar: false,
+        };
+    const constraints = plannerMode === "active"
       ? applyValidatedPlannerPlan(legacyConstraints, planner.validatedPlan)
       : legacyConstraints;
     console.info("[chat-v2] planner-plan", {
       requestId,
       sessionId,
-      mode: process.env.SOLAR_PLANNER_MODE || "shadow",
+      mode: plannerMode,
       usedSolar: planner.usedSolar,
       issues: planner.issues,
       differences: plannerDifferences(legacyConstraints, planner.validatedPlan),
@@ -348,6 +359,7 @@ async function handleChatRequest(request: Request) {
         cards,
         detailedAnswer,
         planner,
+        factTablesDegraded,
         extra: {
           matched: classified.matched,
           partially_matched: classified.partiallyMatched,
@@ -375,6 +387,7 @@ async function handleChatRequest(request: Request) {
         detailedAnswer,
         shortAnswerOverride: shortAnswer,
         planner,
+        factTablesDegraded,
         extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
       });
     }
@@ -382,7 +395,7 @@ async function handleChatRequest(request: Request) {
     if (constraints.requestedFields.length > 1) {
       const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
       return v2Response({
-        question, cards, detailedAnswer, planner,
+        question, cards, detailedAnswer, planner, factTablesDegraded,
         extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
       });
     }
@@ -390,7 +403,7 @@ async function handleChatRequest(request: Request) {
     if (intent === "cost") {
       const detailedAnswer = deterministicDirectCostAnswer(cards);
       return v2Response({
-        question, cards, detailedAnswer, planner,
+        question, cards, detailedAnswer, planner, factTablesDegraded,
         extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
       });
     }
@@ -398,7 +411,7 @@ async function handleChatRequest(request: Request) {
     if (intent === "deadline") {
       const detailedAnswer = deterministicDeadlineAnswer(cards);
       return v2Response({
-        question, cards, detailedAnswer, planner,
+        question, cards, detailedAnswer, planner, factTablesDegraded,
         extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
       });
     }
@@ -408,7 +421,7 @@ async function handleChatRequest(request: Request) {
       const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
       const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
       return v2Response({
-        question, cards: supportedCards, detailedAnswer, planner,
+        question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded,
         extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
       });
     }
@@ -416,13 +429,13 @@ async function handleChatRequest(request: Request) {
     if (intent === "housing" || intent === "language") {
       const detailedAnswer = deterministicFactAnswer(cards, intent);
       return v2Response({
-        question, cards, detailedAnswer, planner,
+        question, cards, detailedAnswer, planner, factTablesDegraded,
         extra: { searchMode: searchMode(intent) },
       });
     }
     const detailedAnswer = deterministicGeneralAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner,
+      question, cards, detailedAnswer, planner, factTablesDegraded,
       extra: { searchMode: searchMode(intent) },
     });
   } catch (error) {

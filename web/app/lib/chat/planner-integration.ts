@@ -87,3 +87,12 @@ export function resolveReasoningEffort(): "minimal" | "low" | "medium" | "high" 
   const raw = process.env.SOLAR_REASONING_EFFORT;
   return raw && REASONING_EFFORT_VALUES.has(raw) ? raw as "minimal" | "low" | "medium" | "high" : "minimal";
 }
+
+// "active" is the default: the Solar planner's parsed conditions are applied
+// to the search. Only an explicit "shadow" opts back into regex-only
+// filtering with the planner call skipped entirely (see route.ts) -- shadow
+// used to still call the planner and discard the result on every request,
+// which cost a full Solar call for zero effect on the answer.
+export function resolvePlannerMode(): "active" | "shadow" {
+  return process.env.SOLAR_PLANNER_MODE === "shadow" ? "shadow" : "active";
+}
