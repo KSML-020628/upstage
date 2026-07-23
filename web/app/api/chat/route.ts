@@ -19,7 +19,7 @@ import {
   sanitizeGeneratedAnswer,
   searchMode,
 } from "../../lib/chat/answers";
-import { composeShortAnswer } from "../../lib/chat/short-answer";
+import { attachRecommendationExplanations, composeShortAnswer } from "../../lib/chat/short-answer";
 import {
   detectConstraints,
   detectConversationConstraints,
@@ -117,31 +117,16 @@ async function v2Response(args: {
   // reasoner's comparative narrative -- the deterministic template already
   // says everything there is to say, so skip a Solar call (and its latency)
   // that would only ever get discarded. See docs/decisions.md.
+  const emptyStats = { generated: 0, accepted: 0, rejected: 0 };
   const reasoner = apiKey && args.runReasoner
     ? await runSolarReasoner({ apiKey, model, packet, reasoningEffort: resolveReasoningEffort() })
-    : { output: null, usedSolar: false, issues: [apiKey ? "reasoner_not_needed" : "missing_api_key"] };
+    : { output: null, usedSolar: false, issues: [apiKey ? "reasoner_not_needed" : "missing_api_key"], recommendationStats: emptyStats };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
   // Only the reasoner's own text needs this pass -- presentation.shortAnswer
   // is always a deterministic template and never contains a placeholder like
   // "XXX"/"TBD" to begin with.
   const narrative = reasoner.output?.shortAnswer ? sanitizeGeneratedAnswer(reasoner.output.shortAnswer) : "";
-
-  // Each recommendation was already validated in reasoner.ts (schema-shaped,
-  // reasonFactIds/cautionFactIds filtered to that university's own fact IDs,
-  // explanation checked for ungrounded numbers/URLs) -- it was computed and
-  // then never read past that point. Attach it to the matching card here so
-  // it actually reaches the detail view instead of being silently discarded.
-  const explanationByUniversityId = new Map((reasoner.output?.recommendations ?? []).map((item) => [item.universityId, item]));
-  const cardsWithExplanation = args.cards.map((card) => {
-    const recommendation = explanationByUniversityId.get(card.university_id);
-    if (!recommendation?.explanation) return card;
-    return {
-      ...card,
-      ai_explanation: recommendation.explanation,
-      explanation_fact_ids: recommendation.reasonFactIds,
-      caution_fact_ids: recommendation.cautionFactIds,
-    };
-  });
+  const cardsWithExplanation = attachRecommendationExplanations(args.cards, reasoner.output?.recommendations ?? []);
 
   const { shortAnswer, source: shortAnswerSource } = composeShortAnswer({
     cards: cardsWithExplanation,
@@ -166,6 +151,7 @@ async function v2Response(args: {
   // explanation is attached but its card falls outside this response's final
   // card set), and collapsing them hid which stage actually lost the value.
   const attachedRecommendationCount = reasoner.output?.recommendations.filter((item) => item.explanation).length ?? 0;
+  const cardExplanationsDisplayed = cardsWithExplanation.filter((card) => card.ai_explanation).length;
   console.info("[chat-v2] short-answer-source", {
     requestId: args.requestId,
     source: shortAnswerSource,
@@ -173,7 +159,19 @@ async function v2Response(args: {
     reasonerAccepted: reasoner.usedSolar,
     shortNarrativeDisplayed: shortAnswerSource === "server_plus_solar" || shortAnswerSource === "solar_reasoner",
     cardExplanationsAttached: attachedRecommendationCount,
-    cardExplanationsDisplayed: cardsWithExplanation.filter((card) => card.ai_explanation).length,
+    cardExplanationsDisplayed,
+  });
+  // Solar's actual adoption rate for the stricter per-cited-fact grounding
+  // added in Phase 2.5 -- rejectionReasons is the subset of issues tagged
+  // with a universityId (":<id>"), i.e. actual per-recommendation rejections,
+  // not packet-level issues like "unsafe_short_answer" or "reasoner_not_needed".
+  console.info("[chat-v2] reasoner-recommendations", {
+    requestId: args.requestId,
+    recommendationsGenerated: reasoner.recommendationStats.generated,
+    recommendationsAccepted: reasoner.recommendationStats.accepted,
+    recommendationsRejected: reasoner.recommendationStats.rejected,
+    rejectionReasons: reasoner.issues.filter((issue) => issue.includes(":")),
+    fallbackExplanationsUsed: cardsWithExplanation.length - cardExplanationsDisplayed,
   });
 
   return NextResponse.json({

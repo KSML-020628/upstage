@@ -1,4 +1,29 @@
+import type { ReasonerOutput } from "./reasoner";
 import type { ResultCard } from "./types";
+
+// Each recommendation was already validated in reasoner.ts (schema-shaped,
+// reasonFactIds/cautionFactIds filtered to that university's own fact IDs,
+// explanation checked for ungrounded numbers/URLs and unknown-state
+// upgrades) -- attach it to the matching card. Cards with no accepted
+// recommendation (rejected, or the reasoner recommended nothing for them)
+// are returned unchanged -- they never disappear, they just fall back to
+// the server's own deterministic description with no ai_explanation.
+export function attachRecommendationExplanations(
+  cards: ResultCard[],
+  recommendations: ReasonerOutput["recommendations"],
+): ResultCard[] {
+  const byUniversityId = new Map(recommendations.map((item) => [item.universityId, item]));
+  return cards.map((card) => {
+    const recommendation = byUniversityId.get(card.university_id);
+    if (!recommendation?.explanation) return card;
+    return {
+      ...card,
+      ai_explanation: recommendation.explanation,
+      explanation_fact_ids: recommendation.reasonFactIds,
+      caution_fact_ids: recommendation.cautionFactIds,
+    };
+  });
+}
 
 export type ShortAnswerSource = "solar_reasoner" | "server_plus_solar" | "authoritative_template" | "deterministic_fallback" | "override";
 

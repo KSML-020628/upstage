@@ -18,6 +18,12 @@ export type EvidenceUniversity = {
   city: string;
   verdict: "matched" | "partial";
   conditionSummary: string[];
+  // condition_checks[].key values whose state is "unknown" for this
+  // university -- e.g. "housing_guaranteed". Lets the reasoner's validation
+  // check that a "partial" verdict's caution disclosure is actually about
+  // the topic that's unresolved, not just any unrelated caution fact (see
+  // reasoner.ts's unknown-upgrade guard).
+  unresolvedConditionKeys: string[];
   facts: EvidenceFact[];
 };
 
@@ -47,7 +53,7 @@ type EvidenceCard = {
   match_status?: "matched" | "partial";
   highlights?: string[];
   unknown_fields?: string[];
-  condition_checks?: Array<{ label: string; state: string; detail: string }>;
+  condition_checks?: Array<{ key: string; label: string; state: string; detail: string }>;
   fact_bundle?: CardFact[];
 };
 
@@ -77,6 +83,7 @@ export function createEvidencePacket(question: string, queryPlan: QueryPlan | nu
       city: card.city,
       verdict: card.match_status === "matched" ? "matched" as const : "partial" as const,
       conditionSummary: (card.condition_checks ?? []).map((check) => `${check.label}: ${check.state} (${check.detail})`).slice(0, 12),
+      unresolvedConditionKeys: (card.condition_checks ?? []).filter((check) => check.state === "unknown").map((check) => check.key),
       facts,
     };
   });
