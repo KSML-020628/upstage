@@ -289,7 +289,13 @@ export async function runSolarPlanner(args: {
           { role: "user", content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(90_000),
+      // Sized to fit inside the route's Vercel maxDuration (see vercel.json)
+      // together with the reasoner's own timeout, run sequentially after
+      // this one, plus the Supabase fetch and app logic around both. Real
+      // measured latency at the default reasoning_effort=minimal is 2-6s for
+      // the whole /api/chat request; this budget is headroom for a slow
+      // response, not a target -- see docs/solar_usage.md for the numbers.
+      signal: AbortSignal.timeout(20_000),
     });
     if (!response.ok) throw new Error(`planner_http_${response.status}`);
     const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };

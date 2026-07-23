@@ -126,7 +126,12 @@ export async function runSolarReasoner(args: {
           { role: "user", content: `Write a concise Korean answer. Return {shortAnswer,recommendations:[{universityId,reasonFactIds,cautionFactIds,explanation}],unknownFields,suggestedDetailTab}. EVIDENCE_PACKET=${JSON.stringify(args.packet)}` },
         ],
       }),
-      signal: AbortSignal.timeout(120_000),
+      // Runs after the planner in the same request (see query-plan.ts's
+      // comment) -- 20s (planner) + 25s (this) = 45s, safely inside the 60s
+      // Vercel maxDuration set in vercel.json even in the worst case where
+      // both time out. Real measured latency at reasoning_effort=minimal is
+      // 2-6s for the whole request; see docs/solar_usage.md.
+      signal: AbortSignal.timeout(25_000),
     });
     if (!response.ok) throw new Error(`reasoner_http_${response.status}`);
     const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
