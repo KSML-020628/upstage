@@ -1,0 +1,146 @@
+import type { DateComparator } from "./chat-policy";
+
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ChatSource = {
+  fact_id?: string;
+  title: string;
+  url: string;
+  university_name?: string;
+  source_type?: string;
+  is_official?: boolean;
+  field_key?: string;
+  evidence_quote?: string;
+};
+
+export type FactEvidence = {
+  fact_id?: string;
+  table: string;
+  field_key: string;
+  label: string;
+  value: string;
+  source_url?: string;
+  source_title?: string;
+  source_type?: string;
+  evidence_quote?: string;
+  confidence?: unknown;
+  review_status?: unknown;
+};
+
+export type ResultCard = {
+  university_id: string;
+  university_name: string;
+  country: string;
+  city: string;
+  summary: string;
+  badges: string[];
+  highlights: string[];
+  action_label: string;
+  action_url: string;
+  source_url?: string;
+  source_title?: string;
+  source_type?: string;
+  source_fact_id?: string;
+  source_field_key?: string;
+  evidence_quote?: string;
+  fact_bundle?: FactEvidence[];
+  match_status?: "matched" | "partial";
+  condition_checks?: ConditionCheck[];
+  unknown_fields?: string[];
+};
+
+export type ConditionState = "met" | "unknown" | "failed";
+
+export type ConditionCheck = {
+  key: string;
+  label: string;
+  state: ConditionState;
+  detail: string;
+};
+
+export type EvaluatedUniversity = {
+  university: import("../types").University;
+  checks: ConditionCheck[];
+  status: "matched" | "partial" | "excluded";
+};
+
+export type Intent = "housing" | "language" | "cost" | "deadline" | "quota" | "restriction" | "source" | "general";
+
+export type QuotaMode = "minimum" | "exists" | "missing" | "sort_desc";
+export type DeadlineSemester = "autumn" | "spring";
+export type DeadlineType = "application" | "nomination";
+
+export type QueryConstraints = {
+  intent: Intent;
+  topN: number;
+  requireEurope: boolean;
+  requireAsia: boolean;
+  requireAmericas: boolean;
+  inScope: boolean;
+  requireHousing: boolean;
+  requireHousingGuaranteed: boolean;
+  requireAll: boolean;
+  requireOfficialSource: boolean;
+  requireClearCost: boolean;
+  countries: string[];
+  excludedCountries: string[];
+  excludeAsia: boolean;
+  languageTest?: string;
+  languageScore?: number;
+  languageSubscore?: number;
+  budgetKrwSemester?: number;
+  gpa?: number;
+  major?: string;
+  quotaMin?: number;
+  quotaMode?: QuotaMode;
+  requireGpaKnown?: boolean;
+  sortGpaLowest?: boolean;
+  requireQuotaKnown?: boolean;
+  requireHousingMissing?: boolean;
+  sortDeadlineEarliest?: boolean;
+  deadlineAcademicYear?: number;
+  deadlineSemester?: DeadlineSemester;
+  deadlineType?: DeadlineType;
+  deadlineSpringOnly?: boolean;
+  deadlineRequireClearYear?: boolean;
+  deadlineComparator?: DateComparator;
+  deadlineDate?: string;
+  unsupportedReason?: "cost_of_living_index";
+  requestedFields: string[];
+};
+
+export type CostComponent = {
+  category: "tuition" | "housing" | "living";
+  krw: number;
+  label: string;
+  row: Record<string, unknown>;
+  source?: ChatSource;
+};
+
+export type CostEstimate = {
+  normalizedKrw: number;
+  label: string;
+  sourceUrl?: string;
+  sourceTitle?: string;
+  sourceType?: string;
+  evidenceQuote?: string;
+  categoryCount: number;
+  components: CostComponent[];
+};
+
+export type RankedCandidate = {
+  university: import("../types").University;
+  score: number;
+  cost?: CostEstimate;
+};
+
+export type FactTableBundle = {
+  costs: Record<string, unknown>[];
+  housing: Record<string, unknown>[];
+  languages: Record<string, unknown>[];
+  deadlines: Record<string, unknown>[];
+  quotas: Record<string, unknown>[];
+};
