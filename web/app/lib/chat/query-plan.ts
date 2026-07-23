@@ -278,7 +278,7 @@ export async function runSolarPlanner(args: {
       body: JSON.stringify({
         model: args.model,
         temperature: 0,
-        max_tokens: 900,
+        max_tokens: 16_000,
         reasoning_effort: args.reasoningEffort ?? "minimal",
         response_format: {
           type: "json_schema",
@@ -289,7 +289,7 @@ export async function runSolarPlanner(args: {
           { role: "user", content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(90_000),
     });
     if (!response.ok) throw new Error(`planner_http_${response.status}`);
     const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };

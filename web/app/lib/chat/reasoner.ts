@@ -115,7 +115,7 @@ export async function runSolarReasoner(args: {
       body: JSON.stringify({
         model: args.model,
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: 20_000,
         reasoning_effort: args.reasoningEffort ?? "minimal",
         response_format: {
           type: "json_schema",
@@ -126,7 +126,7 @@ export async function runSolarReasoner(args: {
           { role: "user", content: `Write a concise Korean answer. Return {shortAnswer,recommendations:[{universityId,reasonFactIds,cautionFactIds,explanation}],unknownFields,suggestedDetailTab}. EVIDENCE_PACKET=${JSON.stringify(args.packet)}` },
         ],
       }),
-      signal: AbortSignal.timeout(35_000),
+      signal: AbortSignal.timeout(120_000),
     });
     if (!response.ok) throw new Error(`reasoner_http_${response.status}`);
     const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
