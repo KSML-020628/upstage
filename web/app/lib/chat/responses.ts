@@ -90,21 +90,45 @@ export function needsFollowupScopeClarification(
   return hasRecommendationConditions(priorConstraints) && hasRecommendationConditions(currentConstraints);
 }
 
+export type TargetClarificationVerdict = {
+  needsClarification: boolean;
+  // True when the regex heuristic below would have asked for clarification,
+  // but the Solar planner already returned a plan with real search
+  // conditions -- so the question was in fact a conditional search, and the
+  // regex-based "does this look like a search?" guess was wrong. Logged by
+  // the caller to track how often this heuristic and the planner disagree.
+  overriddenByPlanner: boolean;
+};
+
 export function needsTargetClarification(
   intent: Intent,
   exactTargetCount: number,
   plannerTargetCount: number,
   question: string,
-) {
+  plannerHasConditions: boolean,
+): TargetClarificationVerdict {
   const directFactIntent = new Set<Intent>(["deadline", "language", "housing", "quota", "source", "restriction"]);
-  if (!directFactIntent.has(intent) || exactTargetCount > 0 || plannerTargetCount > 0) return false;
+  if (!directFactIntent.has(intent) || exactTargetCount > 0 || plannerTargetCount > 0) {
+    return { needsClarification: false, overriddenByPlanner: false };
+  }
 
   const normalized = question.normalize("NFKC").toLowerCase();
   const asksForCollection = /추천|비교|순위|가장|빠른|이른|낮은|높은|어디|어느\s*(?:대학|학교)|대학.{0,12}(?:찾|보여|알려|추천)|학교.{0,12}(?:찾|보여|알려|추천)|있는\s*(?:대학|학교)|가능한\s*(?:대학|학교)|몇\s*곳|top\s*\d+|recommend|compare|rank|which\s*(?:universities|schools)/i.test(normalized);
   const hasScopedDeadlinePeriod = intent === "deadline"
     && /\b20\d{2}\b/.test(normalized)
     && /가을|봄|autumn|fall|spring/.test(normalized);
-  return !asksForCollection && !hasScopedDeadlinePeriod;
+  const regexSaysNeedsClarification = !asksForCollection && !hasScopedDeadlinePeriod;
+
+  // The Solar planner returning a plan with a real search condition (a
+  // region/country/language/GPA/housing/quota/major filter) is authoritative
+  // evidence this is a conditional search query. The regex heuristic above is
+  // a fallback for when the planner is unavailable or returned nothing
+  // usable -- not a second opinion that can override a planner result that
+  // does exist. See docs/decisions.md.
+  if (plannerHasConditions) {
+    return { needsClarification: false, overriddenByPlanner: regexSaysNeedsClarification };
+  }
+  return { needsClarification: regexSaysNeedsClarification, overriddenByPlanner: false };
 }
 
 export function unsupportedDataResponse(reason?: QueryConstraints["unsupportedReason"]) {

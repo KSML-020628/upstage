@@ -26,7 +26,14 @@ import {
   isCostOfLivingIndexQuestion,
   isRemovedCostRecommendation,
 } from "../../lib/chat/constraints";
-import { applyValidatedPlannerPlan, followupOrdinal, plannerDifferences, resolvePlannerMode, resolveReasoningEffort } from "../../lib/chat/planner-integration";
+import {
+  applyValidatedPlannerPlan,
+  followupOrdinal,
+  plannerDifferences,
+  plannerHasSearchConditions,
+  resolvePlannerMode,
+  resolveReasoningEffort,
+} from "../../lib/chat/planner-integration";
 import {
   costOfLivingResponse,
   describeConditionsForClarification,
@@ -234,23 +241,14 @@ async function handleChatRequest(request: Request) {
       contextUniversityIds,
       explicitFollowup,
     });
-    const earlyAliasTargets = universityNamesFromAliases(question)
-      .map((name) => universities.find((university) => university.university_name === name))
-      .filter((university): university is University => Boolean(university));
-    const earlyLegacyTargets = findTargetUniversities(universities, question);
-    const earlyKnownTargets = earlyAliasTargets.length ? earlyAliasTargets : earlyLegacyTargets;
-    const earlyUnknownInstitution = explicitUnknownInstitution(question, earlyKnownTargets);
-    if (earlyUnknownInstitution) return unknownInstitutionResponse(earlyUnknownInstitution, universities.length);
-
-    if (planner.validatedPlan?.clarificationNeeded) {
-      console.info("[chat-v2] clarification", { requestId, source: "solar_planner" });
-      return clarificationResponse(
-        planner.validatedPlan.clarificationQuestion || "어느 대학의 어떤 정보를 확인할까요? 대학명이나 검색 조건을 알려주세요.",
-      );
-    }
-    if (!constraints.inScope) return unsupportedDataResponse(constraints.unsupportedReason);
-
-    const intent = constraints.intent;
+    // Computed once and reused by both the early unknown-institution check
+    // below and the main exactTargets resolution further down -- the planner
+    // has already run by this point, so both checks must see its resolved
+    // targets, not just the alias/legacy-regex matchers. The early check
+    // used to only look at alias+legacy targets, so a question whose only
+    // recognizable university came from the planner (not an alias or the
+    // regex name matcher) could be wrongly reported as an unknown
+    // institution even though the planner had already resolved it.
     const aliasNames = universityNamesFromAliases(question);
     const aliasTargets = aliasNames
       .map((name) => universities.find((university) => university.university_name === name))
@@ -265,7 +263,29 @@ async function handleChatRequest(request: Request) {
       : [];
     const legacyTargets = findTargetUniversities(universities, question);
     const exactTargets = aliasTargets.length ? aliasTargets : plannerTargets.length ? plannerTargets : legacyTargets;
-    if (!explicitFollowup && needsTargetClarification(intent, exactTargets.length, planner.validatedPlan?.universityNames.length ?? 0, question)) {
+    const earlyUnknownInstitution = explicitUnknownInstitution(question, exactTargets);
+    if (earlyUnknownInstitution) return unknownInstitutionResponse(earlyUnknownInstitution, universities.length);
+
+    if (planner.validatedPlan?.clarificationNeeded) {
+      console.info("[chat-v2] clarification", { requestId, source: "solar_planner" });
+      return clarificationResponse(
+        planner.validatedPlan.clarificationQuestion || "어느 대학의 어떤 정보를 확인할까요? 대학명이나 검색 조건을 알려주세요.",
+      );
+    }
+    if (!constraints.inScope) return unsupportedDataResponse(constraints.unsupportedReason);
+
+    const intent = constraints.intent;
+    const targetClarification = needsTargetClarification(
+      intent,
+      exactTargets.length,
+      planner.validatedPlan?.universityNames.length ?? 0,
+      question,
+      plannerHasSearchConditions(planner.validatedPlan),
+    );
+    if (targetClarification.overriddenByPlanner) {
+      console.info("[chat-v2] target-clarification overridden by planner", { requestId, intent, question });
+    }
+    if (!explicitFollowup && targetClarification.needsClarification) {
       console.info("[chat-v2] clarification", { requestId, source: "server_rule", intent });
       const labels: Partial<Record<typeof intent, string>> = {
         deadline: "어느 대학의 지원 마감일을 확인할까요? 대학명을 알려주세요.",
@@ -277,14 +297,27 @@ async function handleChatRequest(request: Request) {
       };
       return clarificationResponse(labels[intent] || "어느 대학의 어떤 정보를 확인할까요? 대학명을 알려주세요.");
     }
-    const unknownInstitution = explicitUnknownInstitution(question, exactTargets);
-    if (unknownInstitution) return unknownInstitutionResponse(unknownInstitution, universities.length);
+    // (explicitUnknownInstitution was already checked above against this same
+    // exactTargets right after it was resolved -- checking again here would
+    // always agree, now that both checks share one target resolution.)
     if (!explicitFollowup && !exactTargets.length) {
       const priorUserTurns = messages.slice(0, -1).filter((message) => message.role === "user");
       const priorConstraints = priorUserTurns.length
         ? detectConversationConstraints(messages.slice(0, -1))
         : undefined;
-      if (needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, detectedConstraints)) {
+      // Pass the planner-merged constraints (not the raw regex-only
+      // detectedConstraints) for the current turn -- same principle as
+      // needsTargetClarification above: if the planner already resolved a
+      // geographic scope the regex missed, that's authoritative and this
+      // gate must see it, not a second, stale opinion. priorConstraints is
+      // necessarily regex-only (there is no stored planner output for past
+      // turns to reconstruct).
+      const regexOnlyVerdict = needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, detectedConstraints);
+      const plannerAwareVerdict = needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, constraints);
+      if (regexOnlyVerdict !== plannerAwareVerdict) {
+        console.info("[chat-v2] followup-scope-clarification overridden by planner", { requestId, question });
+      }
+      if (plannerAwareVerdict) {
         console.info("[chat-v2] clarification", { requestId, source: "followup_scope_ambiguous" });
         const priorSummary = describeConditionsForClarification(priorConstraints!);
         return clarificationResponse(

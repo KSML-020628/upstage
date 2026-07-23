@@ -2,6 +2,33 @@ import type { QueryPlan } from "./query-plan";
 import type { Intent, QueryConstraints } from "./types";
 import { normalizeSearchText } from "./utils";
 
+// Whether the Solar planner returned a plan that actually constrains the
+// search (a region/country/language/GPA/housing/quota/major condition), as
+// opposed to an empty or purely informational plan. See the note in
+// docs/decisions.md: when this is true, it is authoritative evidence the
+// question is a conditional search query, and server-side regex heuristics
+// that ask "does this look like a search?" (e.g. needsTargetClarification's
+// asksForCollection) must defer to it rather than override it.
+export function plannerHasSearchConditions(plan: QueryPlan | null): boolean {
+  if (!plan) return false;
+  const hard = plan.hardFilters;
+  return Boolean(
+    hard.regions?.length ||
+    hard.countries?.length ||
+    hard.excludedRegions?.length ||
+    hard.excludedCountries?.length ||
+    hard.ieltsMax !== undefined ||
+    hard.ieltsMinimumSubscore !== undefined ||
+    hard.toeflMax !== undefined ||
+    hard.gpaValue !== undefined ||
+    hard.housingAvailable !== undefined ||
+    hard.housingGuaranteed !== undefined ||
+    hard.quotaMin !== undefined ||
+    hard.semesters?.length ||
+    hard.majors?.length,
+  );
+}
+
 function plannerIntent(intent: QueryPlan["intent"]): Intent | undefined {
   const map: Partial<Record<QueryPlan["intent"], Intent>> = {
     university_lookup: "general",
