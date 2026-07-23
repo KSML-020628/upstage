@@ -179,25 +179,64 @@ function minimumSubscore(row: FactRow): number | undefined {
   return undefined;
 }
 
+const LANGUAGE_LABELS_KO: Record<string, string> = {
+  german: "독일어", french: "프랑스어", chinese: "중국어", japanese: "일본어",
+  spanish: "스페인어", italian: "이탈리아어", portuguese: "포르투갈어",
+  dutch: "네덜란드어", finnish: "핀란드어", thai: "태국어",
+};
+
+// Real language_requirements.test_type is messy free text ("TOEFL/IELTS/
+// CEFR", "IELTS or TOEFL", "TOEFL, IELTS, TOEIC, Cambridge, Duolingo", ...),
+// not a small clean enum -- forcing it into a fixed set of canonical test
+// names (as a normalizer might) would silently collapse a university that
+// accepts *any* of several tests into just one of them. Shown as-is instead;
+// see docs/decisions.md for why this presenter doesn't try to normalize it.
+function languageLabelKo(raw: string): string | undefined {
+  if (!raw || /^(영어|english)$/i.test(raw)) return undefined;
+  const key = raw.toLowerCase();
+  return LANGUAGE_LABELS_KO[key] ?? (/^[가-힣]+$/.test(raw) ? raw : undefined);
+}
+
 export function presentLanguage(row: FactRow): PresentedField {
-  const test = compactText(row.test_type) || compactText(row.language) || "어학 조건";
+  const rawTestType = compactText(row.test_type);
+  const rawLanguage = compactText(row.language);
+  // The section title must be the test type (IELTS/TOEFL/CEFR/...), not the
+  // language -- this used to be overwritten with the language name below
+  // (almost always "English"/"영어"), so ~75% of real rows showed a
+  // repeated generic "ENGLISH" instead of which test was actually required.
+  // When test_type is genuinely absent (not this project's usual case --
+  // real data has it on 120/124 rows), say so explicitly instead of quietly
+  // showing the language name as if it were the test.
+  const test = rawTestType || "시험 종류 확인 필요";
   const base = baseField(row, "language_requirement", test);
   const embeddedCefr = test.match(/\b([ABC][12])\b/i)?.[1]?.toUpperCase();
   const cefr = compactText(row.cefr_level || row.level) || embeddedCefr;
   const score = embeddedCefr && numericValue(row.minimum_score) === Number(embeddedCefr.slice(1))
     ? undefined
     : numericValue(row.minimum_score ?? row.overall_score);
-  const language = compactText(row.language) || (/german/i.test(test) ? "독일어" : /english/i.test(test) ? "영어" : test.replace(/\blevel\b/ig, "").replace(/\b[ABC][12]\b/ig, "").trim());
+  // English is the implicit default across this dataset (~95% of rows) --
+  // showing it explicitly on every row would just repeat what's already
+  // assumed, so it's suppressed everywhere, not only when test_type is
+  // present. Only a non-English language is worth surfacing.
+  const language = languageLabelKo(rawLanguage);
   const parts: string[] = [];
+  if (language) parts.push(language);
   if (score !== undefined) parts.push(`최소 ${/ielts/i.test(test) ? numberLabel(score, 1) : numberLabel(score)}`);
-  else if (cefr) parts.push(`CEFR ${cefr}`);
+  else if (cefr) parts.push(test.toUpperCase().includes("CEFR") ? cefr : `CEFR ${cefr}`);
   const subscore = minimumSubscore(row);
   if (subscore !== undefined) parts.push(`각 영역 ${/ielts/i.test(test) ? numberLabel(subscore, 1) : numberLabel(subscore)} 이상`);
   if (row.is_required === true) parts.push("필수");
   else if (row.is_required === false) parts.push("필수 아님");
   else parts.push("필수 여부 확인 필요");
-  if (!score && !cefr) parts.unshift("점수 확인 필요");
-  return { ...base, label: language || "어학 조건", status: score !== undefined || cefr ? rowStatus(row) : "unknown", value: parts.join(" · ") };
+  // A score genuinely isn't "확인 필요" (to be looked up) when the test is
+  // confirmed not required in the first place -- otherwise this produced the
+  // contradictory-sounding "점수 확인 필요 · 필수 아님".
+  if (!score && !cefr && row.is_required !== false) parts.unshift("점수 확인 필요");
+  // A score with no test_type behind it isn't "confirmed" -- it's a number
+  // whose test is unknown, which is exactly the ambiguity this function
+  // exists to not paper over.
+  const status = !rawTestType ? "unknown" : score !== undefined || cefr ? rowStatus(row) : "unknown";
+  return { ...base, label: test, status, value: parts.join(" · ") };
 }
 
 const DEADLINE_TYPE_LABELS_KO: Record<string, string> = {

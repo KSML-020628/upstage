@@ -46,6 +46,44 @@ describe("language presentation", () => {
   it("formats subscores", () => assert.equal(presentLanguage({ test_type: "IELTS Academic", minimum_score: 6.5, minimum_subscores: { writing: 6, listening: 6 }, is_required: true }).value, "최소 6.5 · 각 영역 6.0 이상 · 필수"));
   it("does not treat unknown required status as required", () => assert.equal(presentLanguage({ test_type: "TOEFL iBT", minimum_score: 90, is_required: null }).value, "최소 90 · 필수 여부 확인 필요"));
   it("uses CEFR without inventing a score", () => assert.equal(presentLanguage({ language: "English", cefr_level: "B2", is_required: false }).value, "CEFR B2 · 필수 아님"));
+
+  // The label used to be built from `language`, which is almost always
+  // "English"/"영어" in this dataset -- so a university offering IELTS,
+  // TOEFL, and CEFR all showed three identical "ENGLISH" cards with no way
+  // to tell which test a given score belonged to. Real data check (2026-07,
+  // 124 language_requirements rows): 92 rows had this exact bug, 0 after
+  // the fix, and 4 rows have no test_type at all in the source data.
+  it("labels the test type, not the language", () => {
+    assert.equal(presentLanguage({ language: "English", test_type: "TOEFL iBT", minimum_score: 78, is_required: true }).label, "TOEFL iBT");
+    assert.equal(presentLanguage({ language: "English", test_type: "IELTS", minimum_score: 6.0, is_required: true }).label, "IELTS");
+    assert.equal(presentLanguage({ language: "English", test_type: "IELTS Academic", minimum_score: 6.5, is_required: true }).label, "IELTS Academic");
+    assert.equal(presentLanguage({ language: "English", test_type: "TOEFL PBT", minimum_score: 567, is_required: true }).label, "TOEFL PBT");
+  });
+
+  it("does not collapse a compound test_type into one guessed test", () => {
+    // Real data has test_type values like "TOEFL/IELTS/CEFR" or "TOEFL,
+    // IELTS, TOEIC, Cambridge, Duolingo" meaning *any one* of these is
+    // accepted -- shown as-is rather than normalized into a single canonical
+    // name, which would silently claim only one of several accepted tests.
+    assert.equal(presentLanguage({ language: "English", test_type: "TOEFL/IELTS/CEFR", is_required: true }).label, "TOEFL/IELTS/CEFR");
+  });
+
+  it("shows a non-English language instead of the redundant default", () => {
+    assert.equal(presentLanguage({ language: "German", test_type: "CEFR", cefr_level: "B2-C1", is_required: true }).value, "독일어 · B2-C1 · 필수");
+  });
+
+  it("flags a numeric score with no test_type as needing review instead of guessing", () => {
+    const presented = presentLanguage({ language: "English", minimum_score: 78, is_required: true });
+    assert.equal(presented.label, "시험 종류 확인 필요");
+    assert.equal(presented.status, "unknown");
+    // Must not silently guess a test from the score alone (e.g. 78 looking
+    // like a TOEFL iBT score).
+    assert.notEqual(presented.label, "TOEFL iBT");
+  });
+
+  it("does not say a score needs confirming when the test is confirmed not required", () => {
+    assert.equal(presentLanguage({ test_type: "IELTS", is_required: false }).value, "필수 아님");
+  });
 });
 
 describe("condition check presentation", () => {

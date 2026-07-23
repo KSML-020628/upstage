@@ -100,3 +100,26 @@ decision, not a "just defer to planner" fix):**
   followup that the regex misses could still be treated as a fresh topic
   change in those specific paths. Not fixed this pass -- flagged as a
   candidate follow-up, lower observed impact than the two gates above.
+
+## Don't normalize language_requirements.test_type into a fixed enum
+
+**Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows
+`test_type` as-is rather than mapping it onto a small canonical set like
+`"IELTS Academic" | "TOEFL iBT" | "TOEIC" | ...`.
+
+**Why**: an external review correctly identified that the university detail
+page showed every language requirement row as a generic "ENGLISH" title
+regardless of test (root cause: the presenter's label was built from
+`language`, not `test_type` -- fixed 2026-07-23, verified against all 124
+real `language_requirements` rows: 92 had this exact bug, 0 after). The
+review's proposed fix also included normalizing `test_type` into a fixed
+enum via string matching (`normalizeLanguageTestType()`). Checked the real
+data before adopting that part: `test_type` is free text, and a large
+fraction of real rows are **compound** ("TOEFL/IELTS/CEFR", "TOEFL, IELTS,
+TOEIC, Cambridge, Duolingo", "IELTS or TOEFL" -- meaning *any one* of these
+is accepted). Forcing those into a single canonical value would silently
+claim a university only accepts one specific test when it actually accepts
+several -- a real information loss the review's own examples didn't surface
+because they were all single-test rows. Only 4/124 rows have no `test_type`
+at all; those now say "시험 종류 확인 필요" instead of guessing, per the
+review's own principle of not inventing a test from a bare score.
