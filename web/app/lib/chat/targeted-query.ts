@@ -1,5 +1,5 @@
 import type { QueryPlan } from "./query-plan.ts";
-import type { University } from "../types";
+import type { ProfileSection, University } from "../types";
 import type { UniversityCatalogItem } from "./university-catalog.ts";
 import { LANGUAGE_TEST_ALIASES, type LanguageTestName } from "./types.ts";
 import {
@@ -12,6 +12,7 @@ import {
   requestOptionalFactRows,
   supabaseServerRequest,
 } from "./supabase-facts.ts";
+import { factMap, profileFromFacts, sectionsFromFacts, sourceLinks, type CanonicalFactRow } from "../supabase.ts";
 
 export type UniversityFactBundle = {
   universityId: string;
@@ -255,33 +256,89 @@ export async function queryRelevantUniversityFacts(
   return { universityIds, candidateSource, fetchedTables, queryCount, rowCountsByTable, factBundles, unsupportedFields: unsupported, errors };
 }
 
+export type LegacyFallbackData = {
+  profileSections: ProfileSection[];
+  sourceLinksData: Record<string, unknown>[];
+};
+
+// Phase 3A.2: profile_sections and source_links have no dedicated fact
+// table -- both are only ever derived from the canonical_facts blob
+// (ui_profile_json, or the section_NN_summary/evidence_url rows it falls
+// back to). Previously hydrateUniversitiesFromCatalog borrowed both from
+// the full legacy University[] (which requires getChatUniversities()'s
+// full ~53-university load to have already happened), which meant the
+// Targeted Query Builder was never actually independent of the full legacy
+// load -- it just looked independent because the caller already had that
+// full load sitting around anyway. This queries canonical_facts scoped to
+// ONLY the resolved candidate IDs, reusing the exact same derivation logic
+// supabase.ts's own legacy loader uses, so a real Phase 3B primary path
+// (no full legacy preload) can still populate these two fields correctly.
+// course_restrictions has no fact-table OR blob derivation anywhere in this
+// codebase today -- legacy's own exchangeProgram() (supabase.ts) never
+// populates it either -- so it stays a fixed empty array on both sides,
+// not a "fallback" that pretends to depend on anything.
+export type LegacyFallbackFetchResult = {
+  data: Map<string, LegacyFallbackData>;
+  // Reported separately so callers can fold this query's real DB cost into
+  // the same row-count/query-count metrics used for the fair legacy-vs-
+  // targeted latency comparison -- this fetch is real Targeted-side query
+  // load, not something to leave invisible in that comparison.
+  rowCount: number;
+  queryCount: number;
+};
+
+export async function fetchLegacyFallbackFields(universityIds: string[]): Promise<LegacyFallbackFetchResult> {
+  const result = new Map<string, LegacyFallbackData>();
+  if (!universityIds.length) return { data: result, rowCount: 0, queryCount: 0 };
+  const select = "university_id,field_key,topic,value_json,value_text,evidence_url";
+  const rows: CanonicalFactRow[] = [];
+  let queryCount = 0;
+  for (let index = 0; index < universityIds.length; index += 80) {
+    const group = universityIds.slice(index, index + 80).map(encodeURIComponent).join(",");
+    queryCount += 1;
+    rows.push(...(await supabaseServerRequest<CanonicalFactRow[]>(`canonical_facts?select=${select}&university_id=in.(${group})`)));
+  }
+  const byUniversity = new Map<string, CanonicalFactRow[]>();
+  for (const row of rows) {
+    if (!row.university_id) continue;
+    byUniversity.set(row.university_id, [...(byUniversity.get(row.university_id) ?? []), row]);
+  }
+  for (const id of universityIds) {
+    const facts = byUniversity.get(id) ?? [];
+    const mapped = factMap(facts);
+    const profile = profileFromFacts(facts);
+    result.set(id, {
+      profileSections: sectionsFromFacts(profile, mapped),
+      sourceLinksData: sourceLinks(profile, mapped),
+    });
+  }
+  return { data: result, rowCount: rows.length, queryCount };
+}
+
 // Builds the SAME University shape the legacy pipeline uses
 // (exchange_programs[0]), so the caller can feed it into the EXACT SAME
 // evaluateUniversity/passesStructuredFilters/selectCards/
 // selectClassifiedCards functions the legacy path uses -- no separate
-// targeted-only evaluator or ranker is implemented anywhere. Fields with no
-// dedicated fact table (course_restrictions, source_links, profile_sections)
-// are explicitly borrowed from the corresponding legacy University when
-// available, never silently left as an independently-targeted-but-actually-
-// empty value. profile_sections in particular is read by several filters.ts
-// functions (scoreUniversity's sectionText corpus, quotaValue, GPA/major
-// fallback text) -- omitting it doesn't error, it just silently changes
-// those functions' output on the targeted side, which showed up as a real
-// scoring divergence between legacy and targeted for otherwise-identical
-// housing-guarantee classifications (confirmed live: the recommendation
-// pool's classification/membership matched exactly on both sides, but the
-// final top-N ranking still swapped universities because their
-// token-matching scores differed once profile_sections dropped out).
+// targeted-only evaluator or ranker is implemented anywhere.
+// city/summary/academic_year/program_name are still borrowed from the
+// legacy University when available (cheap, non-scoring identity fields,
+// not the class of "legacy fallback" this phase scoped down) -- but
+// profile_sections/source_links/course_restrictions now come from
+// legacyFallback (fetchLegacyFallbackFields' scoped, per-candidate query),
+// not from the full legacyById map, so hydration no longer structurally
+// requires a full legacy load for the fields that actually affect scoring.
 export function hydrateUniversitiesFromCatalog(
   catalogItems: UniversityCatalogItem[],
   factBundles: UniversityFactBundle[],
   legacyById: Map<string, University>,
+  legacyFallback: Map<string, LegacyFallbackData>,
 ): University[] {
   const bundleById = new Map(factBundles.map((bundle) => [bundle.universityId, bundle]));
   return catalogItems.map((item): University => {
     const bundle = bundleById.get(item.universityId);
     const legacy = legacyById.get(item.universityId);
     const legacyProgram = legacy?.exchange_programs?.[0];
+    const fallback = legacyFallback.get(item.universityId);
     return {
       id: item.universityId,
       university_name: item.universityName,
@@ -290,7 +347,7 @@ export function hydrateUniversitiesFromCatalog(
       summary: legacy?.summary ?? "",
       latitude: legacy?.latitude ?? 0,
       longitude: legacy?.longitude ?? 0,
-      profile_sections: legacy?.profile_sections,
+      profile_sections: fallback?.profileSections ?? [],
       exchange_programs: [{
         id: legacyProgram?.id ?? `${item.universityId}-targeted`,
         university_id: item.universityId,
@@ -301,8 +358,8 @@ export function hydrateUniversitiesFromCatalog(
         application_deadlines: bundle?.facts.application_deadlines ?? [],
         estimated_costs: bundle?.facts.estimated_costs ?? [],
         quota_facts: bundle?.facts.quota_facts ?? [],
-        course_restrictions: legacyProgram?.course_restrictions ?? [],
-        source_links: legacyProgram?.source_links ?? [],
+        course_restrictions: [],
+        source_links: fallback?.sourceLinksData ?? [],
       }],
     };
   });

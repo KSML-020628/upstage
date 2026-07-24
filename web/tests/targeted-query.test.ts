@@ -84,29 +84,36 @@ describe("hydrateUniversitiesFromCatalog: common Domain Model, no separate targe
       [{ universityId: "u-sheffield", universityName: "University of Sheffield", aliases: [], country: "United Kingdom", region: "europe" }],
       factBundles,
       legacyById,
+      new Map(),
     );
     assert.equal(university.id, "u-sheffield");
     assert.equal(university.exchange_programs?.[0]?.housing_options?.length, 1);
     assert.equal(university.exchange_programs?.[0]?.housing_options?.[0]?.housing_guaranteed, true);
   });
 
-  it("explicitly borrows course_restrictions/source_links from the legacy University (no independent targeted fetch)", () => {
-    const legacy: University = {
-      id: "u-sheffield", university_name: "University of Sheffield", country: "United Kingdom", city: "Sheffield",
-      summary: "", latitude: 0, longitude: 0,
-      exchange_programs: [{
-        id: "p1", university_id: "u-sheffield", academic_year: "2026/27", program_name: "Exchange",
-        course_restrictions: [{ restriction_text: "Some restriction" }],
-        source_links: [{ url: "https://example.com" }],
-      }],
-    };
-    const legacyById = new Map([["u-sheffield", legacy]]);
+  it("gets source_links/profile_sections from the scoped legacyFallback map (Phase 3A.2: not the full legacy load); course_restrictions always empty (no fact-table or blob source exists for it anywhere)", () => {
+    const legacyFallback = new Map([
+      ["u-sheffield", { profileSections: [{ section_number: "01", section_title: "Overview", summary: "text", source_note: "", evidence_url: "" }], sourceLinksData: [{ url: "https://example.com" }] }],
+    ]);
     const [university] = hydrateUniversitiesFromCatalog(
       [{ universityId: "u-sheffield", universityName: "University of Sheffield", aliases: [], country: "United Kingdom", region: "europe" }],
       [],
-      legacyById,
+      new Map(),
+      legacyFallback,
     );
-    assert.equal(university.exchange_programs?.[0]?.course_restrictions?.[0]?.restriction_text, "Some restriction");
+    assert.equal(university.exchange_programs?.[0]?.course_restrictions?.length, 0);
     assert.equal(university.exchange_programs?.[0]?.source_links?.[0]?.url, "https://example.com");
+    assert.equal(university.profile_sections?.[0]?.section_title, "Overview");
+  });
+
+  it("defaults to empty source_links/profile_sections when the university has no legacyFallback entry (not an error)", () => {
+    const [university] = hydrateUniversitiesFromCatalog(
+      [{ universityId: "u-unknown", universityName: "Unknown University", aliases: [], country: "", region: "" }],
+      [],
+      new Map(),
+      new Map(),
+    );
+    assert.deepEqual(university.exchange_programs?.[0]?.source_links, []);
+    assert.deepEqual(university.profile_sections, []);
   });
 });
