@@ -1,3 +1,17 @@
+// English short-form aliases (e.g. "Sheffield" for "University of Sheffield")
+// are only added for names distinctive enough that the bare short form won't
+// false-positive-match an unrelated question -- deliberately excludes
+// "University of Indonesia" ("Indonesia") and "University of Sao Paulo" ("Sao
+// Paulo"), since those are a country name and a major world city name that
+// could appear in a totally unrelated question and wrongly resolve it as a
+// single-university query. Without this, a comparison sentence naming two
+// universities by bare English short name only (no "University of" prefix,
+// no Korean nickname, no "university/college/대학/학교" keyword anywhere in
+// the sentence) fails BOTH the alias matcher and findTargetUniversities's
+// keyword-gated single-token heuristic (selection.ts), so exactTargets ends
+// up empty and the query falls through to generic recommendation ranking --
+// confirmed live: "Sheffield와 Bristol을 어학, 기숙사, 마감일 기준으로
+// 비교해줘" returned 4 unrelated universities instead of Sheffield/Bristol.
 export const UNIVERSITY_ALIASES: Record<string, string[]> = {
   "Aoyama Gakuin University": ["아오야마가쿠인대학교", "아오야마가쿠인대", "아오야마 대학"],
   "Bogazici University": ["보아지치대학교", "보아지치대"],
@@ -37,16 +51,16 @@ export const UNIVERSITY_ALIASES: Record<string, string[]> = {
   "Toulouse Business School": ["툴루즈비즈니스스쿨", "툴루즈경영대학", "TBS"],
   "UNICAMP (University of Campinas)": ["캄피나스주립대학교", "캄피나스대학교", "UNICAMP"],
   "Universidad San Francisco de Quito": ["샌프란시스코데키토대학교", "키토샌프란시스코대", "USFQ"],
-  "University of Bristol": ["브리스톨대학교", "브리스톨대"],
+  "University of Bristol": ["브리스톨대학교", "브리스톨대", "Bristol"],
   "University of Central Lancashire": ["센트럴랭커셔대학교", "중앙랭커셔대학교", "UCLan"],
-  "University of Copenhagen": ["코펜하겐대학교", "코펜하겐대"],
+  "University of Copenhagen": ["코펜하겐대학교", "코펜하겐대", "Copenhagen"],
   "University of Eastern Finland": ["동핀란드대학교", "동부핀란드대학교", "UEF"],
-  "University of Helsinki": ["헬싱키대학교", "헬싱키대"],
+  "University of Helsinki": ["헬싱키대학교", "헬싱키대", "Helsinki"],
   "University of Indonesia": ["인도네시아대학교", "인도네시아대", "UI대학교"],
-  "University of Manitoba": ["매니토바대학교", "매니토바대"],
-  "University of Rostock": ["로스토크대학교", "로스토크대"],
+  "University of Manitoba": ["매니토바대학교", "매니토바대", "Manitoba"],
+  "University of Rostock": ["로스토크대학교", "로스토크대", "Rostock"],
   "University of Sao Paulo": ["상파울루대학교", "상파울루대", "USP"],
-  "University of Sheffield": ["셰필드대학교", "셰필드대", "쉐필드대학교", "쉐필드대"],
+  "University of Sheffield": ["셰필드대학교", "셰필드대", "쉐필드대학교", "쉐필드대", "Sheffield"],
   "University of Southern Denmark": ["남덴마크대학교", "남부덴마크대학교", "SDU"],
   "University of the West of England(UWE Bristol)": ["서잉글랜드대학교", "UWE브리스톨", "UWE"],
   "University of Verona": ["베로나대학교", "베로나대"],
