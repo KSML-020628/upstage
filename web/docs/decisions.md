@@ -454,6 +454,86 @@ ID set -- a different, new-question hits cold more often in practice than
 legacy's "warm after the very first request of any kind" property, even
 though each individual targeted fetch is smaller.
 
+## Phase 3B step 1: Targeted primary for single-university lookups (canary)
+
+**Branch**: `solar-pipeline-phase3b-canary`, off latest `origin/main` after the
+Phase 3A merge (`8ffdebc`). This is the first step where the Targeted Query
+Builder can actually construct a real user-facing response, not just log a
+shadow comparison -- scoped as narrowly as the approval allowed.
+
+**Scope, enforced structurally, not just by intent name**: a request is only
+even considered for the Targeted primary path when `exactTargets.length ===
+1` (exactly one already-resolved named university -- zero means a
+recommendation query, two or more means a comparison/ranking query) AND
+`followupTargets.length === 0` (no follow-up context at all, since a
+follow-up-based re-ranking is explicitly held back for a later expansion)
+AND `intent` is one of `general`/`language`/`housing`/`deadline`
+(`TARGETED_PRIMARY_ALLOWED_INTENTS`, `targeted-primary.ts`) -- `cost`/
+`quota`/`restriction`/`source` are not in this set for step 1, regardless of
+target count. This directly encodes every item on the "보류" (held-back)
+list from the approval: condition-based recommendations, housing-guarantee
+recommendations, region-wide recommendations, compound-condition
+recommendations, and multi-university comparison/ranking are all excluded
+by the target-count and follow-up checks, not by trying to enumerate every
+possible recommendation-shaped question.
+
+**Feature flag defaults doubly safe, unlike the shadow flags.** Shadow
+(Phase 3A.2) only ever logs a comparison, so its sample rate defaults to 1
+once enabled -- a bug there costs nothing user-facing. This flag changes
+what a real user sees, so `CHAT_TARGETED_PRIMARY_ENABLED` (default off)
+AND `CHAT_TARGETED_PRIMARY_CANARY_RATE` (default **0**, not 1) both have to
+be explicitly set for any real traffic to be routed -- flipping the enabled
+flag alone still sends 0% of eligible traffic through the Targeted path.
+
+**Fallback safety net (`resolveTargetedPrimary`, `targeted-primary.ts`)**:
+every one of these falls all the way back to the caller's already-computed
+legacy `cards` -- the function never returns a broken or partial result,
+only "use the targeted cards" or "keep using legacy":
+- `targeted_error` -- any exception anywhere in candidate resolution,
+  fetching, or hydration (single try/catch around the whole attempt)
+- `unsupported_field` -- if the requested fields include
+  course_restrictions/source_links (no dedicated fact table). Phase
+  3A.1/3A.2's shadow work built a scoped legacy-fallback-composited value
+  for these fields for *comparison* purposes, but this canary step falls
+  all the way back to legacy instead of shipping a partially-composited
+  result to a real user as if the Targeted path had produced it
+  independently -- a stricter bar than the shadow path's, deliberately
+- `empty_result` -- if candidate/hydration/selection produces zero cards
+- `validation_failed` -- if candidate resolution doesn't return exactly the
+  one already-confirmed target ID back (should be structurally impossible
+  given `providedUniversityIds` is a direct passthrough in
+  `resolveCandidateUniversityIds`, but checked explicitly rather than
+  assumed, since an assumption silently violated is exactly how a step like
+  this ships a wrong answer to a real user)
+- `flag_disabled` / `intent_not_eligible` / `followup_not_eligible` /
+  `not_single_target` / `no_validated_plan` / `out_of_scope` /
+  `canary_miss` -- never attempted at all (not a failure, just out of this
+  step's scope or the canary roll)
+
+`selectedPath` (`targeted_primary` | `legacy_fallback` | `legacy_default`)
+and `fallbackReason` are logged (`[chat-v2] targeted-primary`) on every
+request that reaches this point in the pipeline, regardless of outcome.
+
+**Live verification**: with the flag on (canary rate 1), captured full
+responses for all 4 allowed single-university intents and diffed them
+byte-for-byte against the same 4 requests with the flag off (default) --
+card IDs, fact bundles, and the final answer text matched exactly for all
+4. Ran the full 32-scenario qa-runner suite with the flag on: still 32/32
+pass, with 10 requests actually routed through `targeted_primary`, 9
+correctly excluded as multi-target (recommendation/comparison), 3 correctly
+excluded as follow-ups, 2 correctly excluded by intent (cost/source-only
+questions) -- zero unexpected fallbacks. 158 unit tests pass (9 new, for
+the eligibility gate specifically -- the success path reuses
+`resolveCandidateUniversityIds`/`queryRelevantUniversityFacts`/
+`hydrateUniversitiesFromCatalog`/`selectCards`, already covered by Phase 3A's
+own test suite).
+
+**Not done in this step (explicitly out of scope per the approval)**: no
+main merge, no recommendation-style query conversion, no follow-up-based
+re-ranking, no removal of the full legacy load (legacy remains the
+mandatory fallback source and is still loaded on every request regardless
+of which path serves the final response).
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows
