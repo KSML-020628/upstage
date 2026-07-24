@@ -361,6 +361,99 @@ tags or forces a cold vs. warm Next.js fetch-cache (`revalidate`) state, so
 a latency comparison between them still should not be read as a clean
 cold-cache number for either path.
 
+## Phase 3A.2: shadow env-gate, scoped profile_sections fetch, cold/warm perf
+
+Preparatory safety work before any Phase 3B primary-path decision -- no
+primary-path change in this phase; the shadow block remains purely
+comparison logging, now additionally gated so it costs nothing by default.
+
+**Shadow execution is now off by default everywhere, not just in
+production.** `CHAT_TARGETED_SHADOW_ENABLED` (default unset = disabled)
+gates the entire shadow block in `route.ts`; `CHAT_TARGETED_SHADOW_SAMPLE_RATE`
+(0-1, default 1 when enabled) further caps what fraction of eligible
+requests actually pay the extra query cost. The gate also now checks
+`finalInScope` in addition to `planner.validatedPlan` -- an out-of-scope
+question (chitchat, off-topic, or the Planner classifying intent as
+`out_of_scope`) has no meaningful legacy cards/constraints to compare
+against, so running the shadow query for it was pure wasted query load with
+zero parity signal (this was actually observed in earlier testing: the
+weather/off-topic test question logged a `parityStatus: "exact"` shadow
+entry with a 7-university candidate set that had nothing to do with the
+question -- harmless to the real response, but meaningless log noise and
+wasted queries).
+
+**profile_sections/source_links no longer require a full legacy load.**
+Previously `hydrateUniversitiesFromCatalog` borrowed both from the full
+`legacyById` map derived from `getChatUniversities()`'s complete ~53-
+university load -- which meant the Targeted Query Builder was never
+actually independent of the full legacy load, it just looked independent
+because the caller already had that full load sitting around for the real
+response anyway. Added `fetchLegacyFallbackFields()` (targeted-query.ts): a
+scoped `canonical_facts` query filtered to ONLY the resolved candidate IDs,
+reusing the exact same derivation functions (`profileFromFacts`/
+`sourceLinks`/`sectionsFromFacts`, now exported from `supabase.ts`) the
+legacy loader itself uses, so a future Phase 3B primary path (no full
+legacy preload) can still populate these two fields correctly.
+`course_restrictions` was found to have no fact-table OR blob derivation
+anywhere in this codebase today -- legacy's own `exchangeProgram()`
+(`supabase.ts`) never populates it either -- so it's now a fixed empty
+array on both sides rather than a "fallback" pretending to depend on
+something that was never real.
+
+**This scoped fetch has a real, non-trivial cost of its own, worth flagging
+for a later optimization pass.** It selects every `field_key` for the
+candidate universities' `canonical_facts` rows (needed because
+`profile_sections` can be spread across an arbitrary number of
+`section_NN_summary` rows with no fixed field_key list to filter on), not
+just the ones profile_sections/source_links actually need. Measured live
+for the housing-guarantee recommendation query (30 candidates): this one
+query alone transferred 534 rows / ~1.24MB, close to the entire legacy
+canonical_facts table's real size (1144 rows / ~2.3MB across all 53
+universities) -- for a broad-candidate recommendation query, this fallback
+fetch alone can approach the cost of the thing it's supposed to avoid. A
+single-university lookup doesn't have this problem (26 rows / ~46KB for one
+university). Not fixed this pass -- flagged as a concrete follow-up
+(narrowing the canonical_facts select to only rows whose field_key matches
+`ui_profile_json` or `/^section_\d{2}_summary$/`, evaluated server-side via
+a `field_key=in.(...)` list built from a one-time discovery query, or a
+`field_key=ilike.section_*` pattern if PostgREST supports it) rather than
+risk an incomplete field_key list under time pressure.
+
+**Cold/warm/row-count/query-count/byte comparison, measured on the same
+basis.** "Cold" = first request after a fresh dev-server restart (empty
+Next.js fetch cache, `revalidate: 300` on both `request()` in `supabase.ts`
+and `supabaseServerRequest()` in `supabase-facts.ts`); "warm" = the
+identical request repeated immediately after. Byte/row/query counts are
+from a standalone script hitting the exact same REST endpoints and select
+lists the app itself uses (not inferred).
+
+| | Legacy (full load) | Targeted: single-university (Q1) | Targeted: recommendation, 30 candidates (Q6) |
+|---|---|---|---|
+| Raw DB queries | 3 (`universities` ×1, `canonical_facts` ×2 pages -- 1144 total rows exceeds the 1000/page limit) | 2 (`language_requirements` + scoped `canonical_facts` fallback) | 3 (candidate search + `housing_facts` + scoped `canonical_facts` fallback) |
+| Raw DB rows | 1198 (54 + 1144) | 27 (1 + 26) | 614 (35 candidate-search + 45 + 534) |
+| Data transfer | ~2.41MB | ~48KB (98% less) | ~1.28MB (47% less) |
+| End-to-end, cold | 268ms | 62ms (4.3x faster) | 376ms (**1.7x slower** -- the canonical_facts fallback query dominates) |
+| End-to-end, warm | 45ms | 1ms (45x faster) | 11ms (2.4x faster) |
+
+**Reading this honestly**: for single-university lookups (by far the most
+common query shape in the 12-question suite), Targeted wins decisively on
+every dimension. For broad recommendation queries with a large candidate
+set, Targeted still uses meaningfully fewer rows/bytes than a full legacy
+load, and is still faster once warm -- but can be **slower on a cold
+request specifically**, because the `canonical_facts` fallback query (the
+same one flagged above as needing field_key narrowing) has to pull almost
+as much data as the full legacy table would for that many candidates. This
+is the direct, measured consequence of the un-narrowed fallback query, not
+an inherent property of "targeted vs. full-load" -- narrowing it (per the
+follow-up above) should close most of this gap. Also worth noting: the
+legacy full load's cost is the *same 3 queries / ~2.41MB regardless of
+question* (it always loads everything), so its cold cost is fixed and its
+warm cost benefits from being one shared cache entry across every request,
+while the targeted path's cache entries are scoped per distinct candidate-
+ID set -- a different, new-question hits cold more often in practice than
+legacy's "warm after the very first request of any kind" property, even
+though each individual targeted fetch is smaller.
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows
