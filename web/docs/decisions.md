@@ -534,6 +534,183 @@ re-ranking, no removal of the full legacy load (legacy remains the
 mandatory fallback source and is still loaded on every request regardless
 of which path serves the final response).
 
+## Phase 3B step 2: Targeted runs before Legacy, full load only on fallback
+
+**Branch**: `solar-pipeline-phase3b-step2`, off latest `origin/main` after the
+Phase 3B step 1 merge (`90e5635`). Scope is unchanged from step 1 (single-
+university `general`/`language`/`housing`/`deadline` lookups only,
+recommendation/comparison/follow-up queries untouched) -- this step changes
+*when* the full legacy load happens, not *what* qualifies for the Targeted
+path.
+
+**The actual architecture change**: step 1 ran the Targeted Query Builder
+*after* `getChatUniversities()` had already loaded everything, so a
+successful Targeted result still cost a full load either way. Step 2 moves
+target resolution and the Targeted attempt *before* the full load --
+`getChatUniversities()` is now only called lazily, inside the fallback
+branch, and never runs at all for a request that the Targeted path serves
+successfully. Verified live: for an eligible single-university request with
+the flag on, the `[chat-v2] selection` log line (which only exists inside
+the full-load fallback code path) never appears at all -- direct proof the
+full load genuinely didn't happen, not just that its result went unused.
+
+**How target resolution works without a full load.** Alias matching
+(`universityNamesFromAliases`) and Planner-named matching are resolved
+against the lightweight catalog (`getUniversityCatalog()`, already used
+elsewhere in the Targeted Query Builder) instead of the full
+`University[]` array -- both only ever needed a name-to-id lookup, which
+the catalog already provides. The Planner's own `knownUniversityNames` list
+now comes from `catalogToKnownUniversityNames(catalog)` instead of
+`universities.map(u => u.university_name)`; both are built from the same
+`universities` table with the same `order=name.asc`, so this is not a
+behavior change to what the Planner sees. The legacy regex/token matcher
+(`findTargetUniversities`) is NOT reproduced against the catalog -- it needs
+full University objects (city, for one scoring branch) the catalog doesn't
+have. If catalog-only resolution (alias + Planner) comes up empty, the fast
+path is simply not eligible; the fallback flow still runs
+`findTargetUniversities` exactly as it always has, so recall is unaffected.
+Follow-up-context eligibility (`hasFollowupContext`) is entirely derivable
+from `explicitFollowup`/`planner.validatedPlan?.followupReference.enabled`/
+`hasExplicitGeography` -- none of which need `University[]` either.
+
+**Single-university identity without a full load.** The fast path's
+hydration step needs `city`/`summary`/`profile_sections`/`source_links`/
+`academic_year`/`program_name` for its one candidate -- previously sourced
+from a full-load `legacyById` map (step 1) or a separate scoped
+`canonical_facts` query (`fetchLegacyFallbackFields`, Phase 3A.2). Found
+that `getUniversity(id)` already existed in `supabase.ts` (used by the
+university detail page) and already does exactly this: one row from
+`universities` plus one scoped `canonical_facts` fetch, hydrated through
+the same `hydrateUniversity()` the full loader uses per-row. Reused it
+directly instead of adding a new function or paying for two separate scoped
+fetches (`fetchLegacyFallbackFields` + a separate identity query) for the
+same one university. `hydrateUniversitiesFromCatalog` was updated to fall
+back to `legacyById`'s own `profile_sections`/`source_links` when the
+separate `legacyFallback` map has no entry for a given id, so it now works
+correctly for both calling conventions: a full-load-adjacent `legacyById`
+with an empty `legacyFallback` (this step), or an empty `legacyById` with a
+populated scoped `legacyFallback` (shadow / step 1, which still run
+alongside a full load).
+
+**Bug found and fixed during this step: the canary hash had poor avalanche
+behavior for sequential/near-identical keys.** The first `stableCanaryBucket`
+implementation (raw djb2 accumulation, no finalizer) mapped `"session-1"`
+through `"session-10"` to nearly-sequential bucket values (7815, 7816, 7817,
+... differing by exactly 1) -- confirmed live: 10 sequential session ids all
+landed on the same side of a 50% canary split instead of roughly half and
+half. Root cause: djb2's accumulator for two strings sharing a prefix and
+differing only in the last character produces outputs that are also nearly
+identical, since the shared-prefix computation is literally the same
+arithmetic up to the final step. Fixed by adding a Murmur3-style finalizer
+(fmix32: xor-shift, multiply, xor-shift, multiply, xor-shift) after the
+djb2 loop, which scrambles the bits so a one-character difference no longer
+produces a near-identical bucket -- verified against 1000 sequential keys
+landing at a real ~54/46 split, and confirmed live against the actual
+running server (10 sequential session ids split 5/5 after the fix, versus
+10/0 before it). Regression test added
+(`tests/targeted-primary.test.ts`) asserting a roughly even split across
+1000 sequential keys, not just that *some* variation exists.
+
+**Session-based (not purely per-request) determinism, verified live.** The
+canary key is the client-sent `sessionId` when present, falling back to the
+request's own id only when the client sent none -- 5 consecutive requests
+with the same session id landed on the same side of a 50% split every time
+(both before and after the hash fix); 10 different session ids produced a
+real mix, not a coincidental all-one-side result (confirmed exactly by the
+bug above, before the fix).
+
+**Measured deliverables** (32-scenario qa-runner run, flag on, canary rate
+1, corrected hash):
+
+| | Count | Note |
+|---|---|---|
+| Reached the fast-path decision point | 31 of 32 | 1 request exits earlier via an out-of-scope early return, same category as Phase 3A.2's weather-question finding -- never reaches this code at all |
+| `targeted_primary` (legacy load skipped) | 10 | ~31% of all 32 requests, ~32% of the 31 that reached the decision point |
+| `not_single_target` (recommendation/comparison, never attempted) | 15 | |
+| `followup_not_eligible` (never attempted) | 4 | |
+| `intent_not_eligible` (cost/source-only, never attempted) | 2 | |
+| `unsupported_field` (attempted, fell back) | 0 in this run; confirmed separately in a dedicated manual test | a direct "Sheffield 공식 출처" request reliably produces `legacy_fallback`/`unsupported_field` and a correct final answer |
+
+**Response parity, re-verified for this step specifically**: captured full
+responses for all 4 allowed intents with the flag on (full load skipped)
+vs. off (full load, as before) and diffed them -- card ids, fact bundles,
+and the exact final answer text matched for all 4, same as step 1, this
+time with the full load provably not happening on the flag-on side at all.
+
+**Cold/warm end-to-end latency -- read honestly, not as "faster overall."**
+Measured the same single-university request cold (fresh server restart)
+and warm (immediate repeat) for both paths:
+
+| | Cold | Warm |
+|---|---|---|
+| Fast path (flag on, legacy load skipped) | ~4.9s | ~3.8s |
+| Legacy full load (flag off) | ~5.4s | ~4.1s |
+
+The gap is real but modest (roughly half a second either way) because
+**Solar API latency (Planner + Reasoner round trips) dominates total
+request time for both paths** -- the DB-query-level saving this phase
+targets is real and much larger in relative terms (Phase 3A.2 already
+measured 2 queries/~48KB for a scoped single-university fetch vs. 3
+queries/~2.41MB for the full load; this step reuses that same scoped-query
+shape via `getUniversity()`), but it's a small fraction of end-to-end
+wall-clock time next to two sequential LLM calls. Do not describe this step
+as a user-facing latency win -- its actual, verified value is removing the
+full-load dependency structurally (proven by the missing `[chat-v2]
+selection` log) and validating fallback correctness, not reducing response
+time.
+
+**Not done in this step**: no main merge, no recommendation-style query
+conversion, no production flag activation (still 0/off by default,
+requires separate approval), no change to the shadow block's own behavior
+(still independently gated, still runs its own full-load comparison when
+enabled).
+
+### Follow-up review found two real gaps before this could go anywhere near production
+
+**1. sessionId-absent requests were silently falling back to a fresh
+per-request key, defeating stable sampling.** The original `canaryKey`
+computation was `sessionId !== "unknown" ? sessionId : requestId` --
+`requestId` is a fresh `crypto.randomUUID()` generated at the top of every
+single request, so an anonymous client (no `sessionId` sent) would get a
+brand-new, unrelated canary key on every message, making their canary
+assignment effectively random per-request despite `stableCanaryBucket`
+itself being fully deterministic. This defeated the entire point of moving
+off `Math.random()`. Fixed: `attemptTargetedFastPath` now takes
+`canaryKey: string | null`; `null` (no client-sent `sessionId`) is a hard
+exclusion from canary (`fallbackReason: "no_stable_canary_key"`, always
+Legacy), never a substitute per-request roll. Verified live: qa-runner
+(which sends no `sessionId` at all) now correctly shows
+`no_stable_canary_key` for every otherwise-eligible single-university
+request instead of `targeted_primary`; a request with a real, stable
+`sessionId` still goes through `targeted_primary` as before and still
+lands on the same side of the split across repeated requests with that
+same id.
+
+**2. The claim "fallback reuses the existing Planner call, no second
+invocation" needed to be independently auditable from logs, not just
+asserted from reading the code.** Added `plannerCallCount`/
+`reasonerCallCount` (both are 0 or 1, since `runSolarPlanner`/
+`runSolarReasoner` each have exactly one call site in the whole file --
+tracked explicitly rather than left implicit) and explicit
+`targetedAttempted`/`targetedSucceeded`/`legacyLoadTriggered`/
+`legacyLoadSkipped` fields on `[chat-v2] targeted-primary`, so a
+production dashboard can compute Targeted success rate, legacy load skip
+rate, and fallback rate directly from the log without re-deriving them
+from `selectedPath`. Verified live against the three cases that matter:
+Targeted success -> `plannerCallCount: 1`, `legacyLoadSkipped: true`;
+`no_stable_canary_key` (no session) -> `plannerCallCount: 1`,
+`legacyLoadTriggered: true`; attempted-then-fell-back
+(`unsupported_field`) -> `plannerCallCount: 1`, `legacyLoadTriggered: true`
+-- all three exactly matching the expected "Planner always exactly once"
+invariant, confirmed from real request logs, not just from the fact that
+there is only one `runSolarPlanner` call site in the source.
+
+Full response parity (cards/fact_bundle/answer text) for all 4 allowed
+intents re-verified after these fixes, with a real `sessionId` on the
+flag-on side -- unaffected, since these changes are purely about
+eligibility gating and observability, not the actual resolution/hydration
+logic.
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows
