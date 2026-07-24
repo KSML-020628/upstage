@@ -178,8 +178,13 @@ async function v2Response(args: {
   // says everything there is to say, so skip a Solar call (and its latency)
   // that would only ever get discarded. See docs/decisions.md.
   const emptyStats = { generated: 0, accepted: 0, rejected: 0 };
-  const reasoner = apiKey && args.runReasoner
-    ? await runSolarReasoner({ apiKey, model, packet, reasoningEffort: resolveReasoningEffort() })
+  // This is the ONLY runSolarReasoner call site in this file -- reasonerCallCount
+  // is tracked explicitly and logged below so that's independently auditable
+  // from real request logs, same as plannerCallCount in handleChatRequest.
+  const willCallReasoner = Boolean(apiKey) && args.runReasoner;
+  const reasonerCallCount = willCallReasoner ? 1 : 0;
+  const reasoner = willCallReasoner
+    ? await runSolarReasoner({ apiKey: apiKey!, model, packet, reasoningEffort: resolveReasoningEffort() })
     : { output: null, usedSolar: false, issues: [apiKey ? "reasoner_not_needed" : "missing_api_key"], recommendationStats: emptyStats };
   const presentation = responsePresentation(args.detailedAnswer, args.cards);
   // Only the reasoner's own text needs this pass -- presentation.shortAnswer
@@ -203,6 +208,7 @@ async function v2Response(args: {
     evidenceFacts: packet.universities.reduce((sum, item) => sum + item.facts.length, 0),
     reasoner: reasoner.usedSolar,
     reasonerIssues: reasoner.issues,
+    reasonerCallCount,
   });
   // Split into three distinct observability signals instead of one
   // "reasonerDisplayed" bit -- they can legitimately disagree (e.g. Solar's
@@ -452,10 +458,18 @@ async function handleChatRequest(request: Request) {
     // fast-path attempt below) uses the lightweight catalog, never the full
     // legacy load -- getChatUniversities() only runs if this request falls
     // through to the legacy fallback further down.
+    //
+    // This is the ONLY runSolarPlanner call site in this whole file (there
+    // is no second call anywhere in the fallback flow below -- the fallback
+    // reuses this same `planner` value, it never re-invokes Solar). This
+    // count is tracked explicitly and logged so that claim is independently
+    // auditable from real request logs, not just from reading the code.
+    const willCallPlanner = Boolean(apiKey) && !isChitchatOnly && plannerMode === "active";
+    const plannerCallCount = willCallPlanner ? 1 : 0;
     const catalog = await getUniversityCatalog();
-    const planner: PlannerRun = apiKey && !isChitchatOnly && plannerMode === "active"
+    const planner: PlannerRun = willCallPlanner
       ? await runSolarPlanner({
-          apiKey,
+          apiKey: apiKey!,
           model: process.env.UPSTAGE_CHAT_MODEL || "solar-pro3",
           question,
           knownUniversityNames: catalogToKnownUniversityNames(catalog),
@@ -532,11 +546,15 @@ async function handleChatRequest(request: Request) {
     const hasFollowupContext = Boolean((explicitFollowup || planner.validatedPlan?.followupReference.enabled) && !hasExplicitGeography);
     // A session id lets the same real user land on the same side of the
     // canary split across their whole conversation (see
-    // targeted-primary.ts's stableCanaryBucket) -- fall back to this
-    // request's own id when the client sent no session id at all, which is
-    // still deterministic per-request, just not stable across a user's
-    // multiple messages.
-    const canaryKey = sessionId !== "unknown" ? sessionId : requestId;
+    // targeted-primary.ts's stableCanaryBucket). When the client sends none,
+    // this is null, not a substitute per-request id -- a per-request key
+    // isn't "stable" by definition, so using one would make an anonymous
+    // client's canary assignment change on every single message, exactly
+    // the inconsistency stable sampling exists to prevent.
+    // attemptTargetedFastPath treats null as a hard exclusion from canary
+    // (always Legacy), never a fallback to Math.random()-equivalent
+    // per-request rolling.
+    const canaryKey = sessionId !== "unknown" ? sessionId : null;
     const fastPath = await attemptTargetedFastPath({
       enabled: TARGETED_PRIMARY_ENABLED,
       canaryRate: TARGETED_PRIMARY_CANARY_RATE,
@@ -550,12 +568,17 @@ async function handleChatRequest(request: Request) {
       constraints,
       catalog,
     });
+    const legacyLoadSkipped = fastPath.selectedPath === "targeted_primary";
     console.info("[chat-v2] targeted-primary", {
       requestId,
       selectedPath: fastPath.selectedPath,
       fallbackReason: fastPath.fallbackReason,
       intent,
-      legacyLoadSkipped: fastPath.selectedPath === "targeted_primary",
+      targetedAttempted: fastPath.targetedAttempted,
+      targetedSucceeded: fastPath.targetedSucceeded,
+      legacyLoadTriggered: !legacyLoadSkipped,
+      legacyLoadSkipped,
+      plannerCallCount,
     });
     if (fastPath.selectedPath === "targeted_primary" && fastPath.cards) {
       const cards = fastPath.cards;

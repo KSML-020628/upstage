@@ -155,4 +155,18 @@ describe("attemptTargetedFastPath: eligibility gate never even attempts the Targ
     const result = await attemptTargetedFastPath({ ...baseArgs, canaryRate: 0 });
     assert.equal(result.fallbackReason, "canary_miss");
   });
+
+  it("does not attempt when there is no stable canary key (canaryKey: null) -- excluded from canary, never rolled per-request", async () => {
+    const result = await attemptTargetedFastPath({ ...baseArgs, canaryKey: null });
+    assert.equal(result.selectedPath, "legacy_default");
+    assert.equal(result.fallbackReason, "no_stable_canary_key");
+    assert.equal(result.targetedAttempted, false);
+    assert.equal(result.targetedSucceeded, false);
+  });
+
+  it("every not-attempted result reports targetedAttempted: false, targetedSucceeded: false", async () => {
+    const result = await attemptTargetedFastPath({ ...baseArgs, enabled: false });
+    assert.equal(result.targetedAttempted, false);
+    assert.equal(result.targetedSucceeded, false);
+  });
 });

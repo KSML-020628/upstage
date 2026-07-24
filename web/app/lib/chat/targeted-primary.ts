@@ -42,14 +42,20 @@ export type TargetedPrimaryResult = {
   // this function never asks the caller to treat a null cards value as "no
   // results", only as "not this path".
   cards: ResultCard[] | null;
+  // Explicit operational fields (not just derivable from selectedPath) so a
+  // production canary dashboard can compute Targeted success rate, legacy
+  // load skip rate, and fallback rate directly from the log without each
+  // consumer re-deriving the same selectedPath -> boolean mapping.
+  targetedAttempted: boolean;
+  targetedSucceeded: boolean;
 };
 
 function notAttempted(fallbackReason: string): TargetedPrimaryResult {
-  return { selectedPath: "legacy_default", fallbackReason, cards: null };
+  return { selectedPath: "legacy_default", fallbackReason, cards: null, targetedAttempted: false, targetedSucceeded: false };
 }
 
 function fellBack(fallbackReason: string): TargetedPrimaryResult {
-  return { selectedPath: "legacy_fallback", fallbackReason, cards: null };
+  return { selectedPath: "legacy_fallback", fallbackReason, cards: null, targetedAttempted: true, targetedSucceeded: false };
 }
 
 // Deterministic djb2-style string hash, folded into a 0-9999 bucket. Used
@@ -98,7 +104,15 @@ export function canaryRollFor(key: string, rate: number): boolean {
 export async function attemptTargetedFastPath(args: {
   enabled: boolean;
   canaryRate: number;
-  canaryKey: string;
+  // null means the caller has no stable key to sample on (no client-sent
+  // sessionId) -- treated as a hard exclusion from canary, not a fallback
+  // to per-request randomness. A per-request key (e.g. this request's own
+  // freshly-generated id) would make an anonymous client's canary
+  // assignment change on every single message, which is exactly the
+  // "bounces between Targeted and Legacy" inconsistency stable sampling
+  // exists to prevent -- there is no such thing as a "stable" per-request
+  // key, so the caller must pass null rather than substitute one.
+  canaryKey: string | null;
   intent: Intent;
   // Resolved via the lightweight catalog (alias + Planner name matching)
   // BEFORE any full legacy load -- never the legacy regex/token matcher
@@ -124,6 +138,10 @@ export async function attemptTargetedFastPath(args: {
   if (args.catalogExactTargetIds.length !== 1) return notAttempted("not_single_target");
   if (!args.planner.validatedPlan) return notAttempted("no_validated_plan");
   if (!args.finalInScope) return notAttempted("out_of_scope");
+  // No stable key to sample on (client sent no sessionId) -- excluded from
+  // canary entirely rather than rolled per-request, which would make an
+  // anonymous client's assignment change on every message.
+  if (args.canaryKey === null) return notAttempted("no_stable_canary_key");
   if (!canaryRollFor(args.canaryKey, args.canaryRate)) return notAttempted("canary_miss");
 
   const targetId = args.catalogExactTargetIds[0];
@@ -185,7 +203,7 @@ export async function attemptTargetedFastPath(args: {
 
     if (!targetedCards.length) return fellBack("empty_result");
 
-    return { selectedPath: "targeted_primary", fallbackReason: null, cards: targetedCards };
+    return { selectedPath: "targeted_primary", fallbackReason: null, cards: targetedCards, targetedAttempted: true, targetedSucceeded: true };
   } catch (error) {
     return fellBack(error instanceof Error ? `targeted_error:${error.message}` : "targeted_error");
   }
