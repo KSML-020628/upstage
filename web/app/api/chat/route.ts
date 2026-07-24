@@ -72,7 +72,21 @@ export const runtime = "nodejs";
 const MAX_MESSAGES = 8;
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_REQUESTS = 10;
+// The bucket key falls back to a single shared "anonymous" id whenever
+// x-forwarded-for is absent (isRateLimited below) -- true for every request
+// against a local `next dev` server, since there's no reverse proxy setting
+// that header. That collapses ALL local requests (real users during
+// development, and qa-runner's 32-scenario regression suite) into one
+// bucket, so qa-runner's sequential run started hitting 429s partway through
+// even at a deliberate 800ms delay between requests (confirmed live: the
+// standard `node qa-runner.mjs` run stalled on 429 retries for roughly two
+// thirds of its 32 turns). The strict per-client limit is a production
+// abuse guard, not something qa-runner's single, trusted, sequential process
+// should be measured against -- explicitly relaxed here for anything that
+// isn't a production build, rather than making qa-runner slow enough to
+// stay under it (which would still be one shared bucket, just slower).
+const RATE_LIMIT_REQUESTS = Number(process.env.CHAT_RATE_LIMIT_REQUESTS)
+  || (process.env.NODE_ENV === "production" ? 10 : 1000);
 
 // Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
 // shadow query needs to know which fact table the PRIMARY intent alone
