@@ -12,7 +12,7 @@
     "dev:sites": "vinext dev",
     "build:sites": "vinext build",
     "start:sites": "vinext start",
-    "test": "npm run test:presenter && npm run test:chat && npm run test:reasoner && npm run test:queryplan && npm run test:scope && npm run test:searchconditions && npm run test:aliases && npm run test:phase3",
+    "test": "npm run test:presenter && npm run test:chat && npm run test:reasoner && npm run test:queryplan && npm run test:scope && npm run test:searchconditions && npm run test:aliases && npm run test:phase3 && npm run test:phase3b",
     "test:presenter": "node --experimental-strip-types --test tests/present-fact.golden.test.ts",
     "test:chat": "node --experimental-strip-types --test tests/chat-policy.test.ts",
     "test:reasoner": "node --experimental-strip-types --test tests/reasoner-validation.test.ts",
@@ -21,6 +21,7 @@
     "test:searchconditions": "node --experimental-strip-types --test tests/search-conditions.test.ts",
     "test:aliases": "node --experimental-strip-types --test tests/university-aliases.test.ts",
     "test:phase3": "node --experimental-strip-types --test tests/planner-grounding.test.ts tests/clarification-state.test.ts tests/targeted-query.test.ts tests/shadow-parity.test.ts tests/university-catalog.test.ts tests/deadline-dates.test.ts",
+    "test:phase3b": "node --experimental-strip-types --test tests/targeted-primary.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

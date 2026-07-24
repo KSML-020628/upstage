@@ -12,6 +12,7 @@ import {
   resolveCandidateUniversityIds,
 } from "../../lib/chat/targeted-query";
 import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
+import { resolveTargetedPrimary } from "../../lib/chat/targeted-primary";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -98,6 +99,16 @@ const RATE_LIMIT_REQUESTS = Number(process.env.CHAT_RATE_LIMIT_REQUESTS)
 // load on every single chat request.
 const SHADOW_ENABLED = process.env.CHAT_TARGETED_SHADOW_ENABLED === "true";
 const SHADOW_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_SHADOW_SAMPLE_RATE) || 1));
+
+// Phase 3B step 1: unlike the shadow flags above, this one can change what
+// a real user sees, so it defaults doubly safe -- both the flag AND the
+// canary rate must be explicitly set for any real traffic to be routed to
+// the Targeted Query Builder. Flipping CHAT_TARGETED_PRIMARY_ENABLED=true
+// alone (with no rate configured) still sends 0% of eligible traffic
+// through it, unlike the shadow sample rate's default-1 posture -- primary-
+// path traffic needs both dials turned deliberately, not just one.
+const TARGETED_PRIMARY_ENABLED = process.env.CHAT_TARGETED_PRIMARY_ENABLED === "true";
+const TARGETED_PRIMARY_CANARY_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_PRIMARY_CANARY_RATE) || 0));
 
 // Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
 // shadow query needs to know which fact table the PRIMARY intent alone
@@ -476,7 +487,14 @@ async function handleChatRequest(request: Request) {
         : universities;
     const useClassification = !exactTargets.length && hasRecommendationConditions(constraints) && intent !== "cost" && intent !== "deadline";
     const classified = useClassification ? selectClassifiedCards(candidateUniversities, constraints, question) : undefined;
-    const cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
+    // let, not const: Phase 3B step 1 (below, after the shadow block) may
+    // replace this with the Targeted Query Builder's own result for
+    // eligible single-university lookups. Every other code path in this
+    // function keeps reading whatever "cards" holds at the point it runs --
+    // the shadow block deliberately runs BEFORE the possible reassignment
+    // so its own legacy-vs-targeted comparison always sees the true legacy
+    // result, never an already-overridden one.
+    let cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
     console.info("[chat-v2] selection", {
       requestId,
       candidateScope: followupTargets.length ? "previous_results" : exactTargets.length ? "resolved_targets" : "all_universities",
@@ -623,6 +641,40 @@ async function handleChatRequest(request: Request) {
         console.error("[chat-v2] targeted-query-shadow failed", shadowError);
       }
     }
+
+    // Phase 3B step 1: for eligible single-university lookups only (see
+    // targeted-primary.ts's own comment for the exact scope and every
+    // fallback condition), try serving the response from the Targeted
+    // Query Builder instead of the legacy full-load pipeline. This is
+    // independent of and unrelated to the shadow block above -- shadow
+    // stays pure comparison logging regardless of this flag, and this
+    // block runs regardless of whether shadow is enabled. Every non-
+    // success outcome here keeps "cards" as the legacy result already
+    // computed above; the user's response is never affected by a Targeted-
+    // side problem, only by which already-correct cards value ends up
+    // being used.
+    const targetedPrimary = await resolveTargetedPrimary({
+      enabled: TARGETED_PRIMARY_ENABLED,
+      canaryRate: TARGETED_PRIMARY_CANARY_RATE,
+      intent,
+      exactTargets,
+      followupTargets,
+      planner,
+      finalInScope,
+      question,
+      constraints,
+      legacyById: new Map(universities.map((university) => [university.id, university])),
+    });
+    if (targetedPrimary.selectedPath === "targeted_primary" && targetedPrimary.cards) {
+      cards = targetedPrimary.cards;
+    }
+    console.info("[chat-v2] targeted-primary", {
+      requestId,
+      selectedPath: targetedPrimary.selectedPath,
+      fallbackReason: targetedPrimary.fallbackReason,
+      intent,
+    });
+
     if (!cards.length) {
       return NextResponse.json({
         answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
