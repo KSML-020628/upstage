@@ -665,6 +665,52 @@ requires separate approval), no change to the shadow block's own behavior
 (still independently gated, still runs its own full-load comparison when
 enabled).
 
+### Follow-up review found two real gaps before this could go anywhere near production
+
+**1. sessionId-absent requests were silently falling back to a fresh
+per-request key, defeating stable sampling.** The original `canaryKey`
+computation was `sessionId !== "unknown" ? sessionId : requestId` --
+`requestId` is a fresh `crypto.randomUUID()` generated at the top of every
+single request, so an anonymous client (no `sessionId` sent) would get a
+brand-new, unrelated canary key on every message, making their canary
+assignment effectively random per-request despite `stableCanaryBucket`
+itself being fully deterministic. This defeated the entire point of moving
+off `Math.random()`. Fixed: `attemptTargetedFastPath` now takes
+`canaryKey: string | null`; `null` (no client-sent `sessionId`) is a hard
+exclusion from canary (`fallbackReason: "no_stable_canary_key"`, always
+Legacy), never a substitute per-request roll. Verified live: qa-runner
+(which sends no `sessionId` at all) now correctly shows
+`no_stable_canary_key` for every otherwise-eligible single-university
+request instead of `targeted_primary`; a request with a real, stable
+`sessionId` still goes through `targeted_primary` as before and still
+lands on the same side of the split across repeated requests with that
+same id.
+
+**2. The claim "fallback reuses the existing Planner call, no second
+invocation" needed to be independently auditable from logs, not just
+asserted from reading the code.** Added `plannerCallCount`/
+`reasonerCallCount` (both are 0 or 1, since `runSolarPlanner`/
+`runSolarReasoner` each have exactly one call site in the whole file --
+tracked explicitly rather than left implicit) and explicit
+`targetedAttempted`/`targetedSucceeded`/`legacyLoadTriggered`/
+`legacyLoadSkipped` fields on `[chat-v2] targeted-primary`, so a
+production dashboard can compute Targeted success rate, legacy load skip
+rate, and fallback rate directly from the log without re-deriving them
+from `selectedPath`. Verified live against the three cases that matter:
+Targeted success -> `plannerCallCount: 1`, `legacyLoadSkipped: true`;
+`no_stable_canary_key` (no session) -> `plannerCallCount: 1`,
+`legacyLoadTriggered: true`; attempted-then-fell-back
+(`unsupported_field`) -> `plannerCallCount: 1`, `legacyLoadTriggered: true`
+-- all three exactly matching the expected "Planner always exactly once"
+invariant, confirmed from real request logs, not just from the fact that
+there is only one `runSolarPlanner` call site in the source.
+
+Full response parity (cards/fact_bundle/answer text) for all 4 allowed
+intents re-verified after these fixes, with a real `sessionId` on the
+flag-on side -- unaffected, since these changes are purely about
+eligibility gating and observability, not the actual resolution/hydration
+logic.
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows
