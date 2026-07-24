@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import type { University } from "../../lib/types";
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
 import { runSolarPlanner, type PlannerRun } from "../../lib/chat/query-plan";
+import { getUniversityCatalog } from "../../lib/chat/university-catalog";
+import { groundPlannerFields } from "../../lib/chat/planner-grounding";
+import {
+  countTotalFactRows,
+  fetchLegacyFallbackFields,
+  hydrateUniversitiesFromCatalog,
+  queryRelevantUniversityFacts,
+  resolveCandidateUniversityIds,
+} from "../../lib/chat/targeted-query";
+import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -56,14 +66,53 @@ import {
 } from "../../lib/chat/selection";
 import { hasActionableSearchConditions, hasRecommendationConditions } from "../../lib/chat/search-conditions";
 import { getChatUniversities, refreshCurrencyRatesInBackground } from "../../lib/chat/supabase-facts";
-import type { ChatMessage, QueryConstraints, ResultCard } from "../../lib/chat/types";
+import type { ChatMessage, Intent, QueryConstraints, ResultCard } from "../../lib/chat/types";
 
 export const runtime = "nodejs";
 
 const MAX_MESSAGES = 8;
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_REQUESTS = 10;
+// The bucket key falls back to a single shared "anonymous" id whenever
+// x-forwarded-for is absent (isRateLimited below) -- true for every request
+// against a local `next dev` server, since there's no reverse proxy setting
+// that header. That collapses ALL local requests (real users during
+// development, and qa-runner's 32-scenario regression suite) into one
+// bucket, so qa-runner's sequential run started hitting 429s partway through
+// even at a deliberate 800ms delay between requests (confirmed live: the
+// standard `node qa-runner.mjs` run stalled on 429 retries for roughly two
+// thirds of its 32 turns). The strict per-client limit is a production
+// abuse guard, not something qa-runner's single, trusted, sequential process
+// should be measured against -- explicitly relaxed here for anything that
+// isn't a production build, rather than making qa-runner slow enough to
+// stay under it (which would still be one shared bucket, just slower).
+const RATE_LIMIT_REQUESTS = Number(process.env.CHAT_RATE_LIMIT_REQUESTS)
+  || (process.env.NODE_ENV === "production" ? 10 : 1000);
+
+// Phase 3A.2: the Targeted Query Builder's shadow comparison is off by
+// default in every environment, including this one -- it must be turned on
+// deliberately (CHAT_TARGETED_SHADOW_ENABLED=true), not merely by having a
+// validatedPlan available. Even when enabled, CHAT_TARGETED_SHADOW_SAMPLE_RATE
+// (0-1, default 1) caps what fraction of eligible requests actually pay the
+// extra query cost, so production observation doesn't mean doubling query
+// load on every single chat request.
+const SHADOW_ENABLED = process.env.CHAT_TARGETED_SHADOW_ENABLED === "true";
+const SHADOW_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_SHADOW_SAMPLE_RATE) || 1));
+
+// Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
+// shadow query needs to know which fact table the PRIMARY intent alone
+// implies, since cards.ts's own requestedFactBundle() always fetches that
+// field regardless of whether constraints.requestedFields lists it.
+const INTENT_TO_REQUESTED_FIELD: Partial<Record<Intent, string>> = {
+  general: "universities",
+  language: "language_requirements",
+  housing: "housing_options",
+  cost: "estimated_costs",
+  deadline: "application_deadlines",
+  quota: "quota_facts",
+  restriction: "course_restrictions",
+  source: "source_links",
+};
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -224,7 +273,9 @@ async function handleChatRequest(request: Request) {
   if (isPromptInjectionRequest(question)) return safePromptInjectionResponse();
 
   try {
+    const legacyQueryStart = Date.now();
     const { universities, factTablesDegraded } = await getChatUniversities();
+    const legacyQueryMs = Date.now() - legacyQueryStart;
     const requestId = crypto.randomUUID().slice(0, 8);
     if (factTablesDegraded) {
       console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
@@ -444,6 +495,134 @@ async function handleChatRequest(request: Request) {
     // conditional searches, and follow-ups (which often revisit/narrow a
     // multi-card set) are exactly the cases with something worth explaining.
     const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
+
+    // Phase 3A/3A.1 shadow run (see docs/decisions.md): a Planner-first
+    // Targeted Query Builder executes alongside the real, unchanged legacy
+    // pipeline ABOVE this line, purely for comparison logging and latency
+    // measurement. Its result is NEVER used for the actual response -- not
+    // for cards, not for shortAnswer, and a failure here must never surface
+    // to the user, hence the isolating try/catch that only ever logs.
+    //
+    // Phase 3A.1: the candidate ID set is now, whenever possible, the SAME
+    // exactTargets/followupTargets our own alias/legacy-name resolution
+    // already computed above (not a re-resolution against the catalog) --
+    // and the hydrated targeted University[] is run through the exact same
+    // selectCards/selectClassifiedCards the legacy path just used, with the
+    // exact same constraints. No separate targeted-only evaluator or ranker
+    // exists anywhere in this codebase.
+    //
+    // Phase 3A.2: gated on SHADOW_ENABLED (default off everywhere) and
+    // finalInScope, not just planner.validatedPlan -- an out-of-scope
+    // question (chitchat, off-topic, or the Planner itself classifying
+    // intent as "out_of_scope") has no meaningful legacy cards/constraints
+    // to compare against, so running the shadow query for it was pure
+    // wasted query load with no useful parity signal. The sample rate
+    // further caps what fraction of eligible requests actually run it.
+    if (SHADOW_ENABLED && planner.validatedPlan && finalInScope && Math.random() < SHADOW_SAMPLE_RATE) {
+      try {
+        const targetedStart = Date.now();
+        let targetedCards: ResultCard[] = [];
+        let targeted: Awaited<ReturnType<typeof queryRelevantUniversityFacts>> | null = null;
+        let targetedError: string | undefined;
+        try {
+          const catalog = await getUniversityCatalog();
+          const grounded = groundPlannerFields({ question, validatedPlan: planner.validatedPlan });
+          // makeCard/requestedFactBundle (cards.ts) always fetches the
+          // PRIMARY intent's own field regardless of requestedFields -- a
+          // plain "IELTS 6.0 유럽 대학 추천해줘" (intent: language) never
+          // populates constraints.requestedFields at all, since the intent
+          // itself is what drives which fact table matters. Without this,
+          // the targeted query fetched zero tables for exactly these
+          // single-intent recommendation questions (fetchedTables: [],
+          // queryCount: 0) even though a real candidate set was resolved.
+          const intentField = INTENT_TO_REQUESTED_FIELD[intent];
+          const groundedRequestedFields = [...new Set([
+            ...(intentField ? [intentField] : []),
+            ...(grounded.requestedFields.value.length ? grounded.requestedFields.value : constraints.requestedFields),
+          ])];
+
+          const providedUniversityIds = followupTargets.length
+            ? followupTargets.map((university) => university.id)
+            : exactTargets.length
+              ? exactTargets.map((university) => university.id)
+              : undefined;
+
+          const { ids: candidateIds, source: candidateSource } = await resolveCandidateUniversityIds({
+            plan: planner.validatedPlan,
+            catalog,
+            providedUniversityIds,
+            // Use the FINAL merged constraints (the same object the common
+            // evaluator below will check), not a separately re-grounded
+            // value -- candidate narrowing must never be stricter than what
+            // the evaluator itself would accept, or recall could drop below
+            // 100%.
+            groundedHousingAvailable: constraints.requireHousing,
+            groundedHousingGuaranteed: constraints.requireHousingGuaranteed,
+            groundedLanguageTest: constraints.languageTest,
+          });
+
+          targeted = await queryRelevantUniversityFacts(candidateIds, groundedRequestedFields, candidateSource);
+
+          // Only hydrate the RESOLVED candidates -- passing the whole
+          // catalog here (a real bug caught by the Phase 3A.1 live re-test:
+          // Q10/Q11 both deterministically substituted 4 arbitrary
+          // universities for the single, correctly-resolved Sheffield ID)
+          // fed 53 mostly-empty University objects into the common
+          // evaluator, which then scored/selected among ALL of them instead
+          // of just the intended candidate.
+          const candidateIdSet = new Set(candidateIds);
+          const candidateCatalogItems = catalog.filter((item) => candidateIdSet.has(item.universityId));
+          const legacyById = new Map(universities.map((university) => [university.id, university]));
+          // Scoped, per-candidate fetch (not the full legacy load) for the
+          // two fields with no dedicated fact table -- see
+          // fetchLegacyFallbackFields' own comment in targeted-query.ts.
+          const legacyFallback = await fetchLegacyFallbackFields(candidateIds);
+          const targetedUniversities = hydrateUniversitiesFromCatalog(candidateCatalogItems, targeted.factBundles, legacyById, legacyFallback.data);
+          // Fold the fallback query's real DB cost into the same metrics
+          // used for the fair legacy-vs-targeted row/query-count comparison
+          // -- it's real Targeted-side query load, not something to leave
+          // invisible in that comparison.
+          targeted = {
+            ...targeted,
+            queryCount: targeted.queryCount + legacyFallback.queryCount,
+            fetchedTables: legacyFallback.rowCount ? [...targeted.fetchedTables, "canonical_facts"] : targeted.fetchedTables,
+            rowCountsByTable: legacyFallback.rowCount
+              ? { ...targeted.rowCountsByTable, canonical_facts: legacyFallback.rowCount }
+              : targeted.rowCountsByTable,
+          };
+          // Common evaluator reuse: identical selectCards/selectClassifiedCards
+          // call the legacy path made above, just fed the targeted-hydrated
+          // University[] instead of the fully-loaded one.
+          const targetedClassified = useClassification
+            ? selectClassifiedCards(targetedUniversities, constraints, question)
+            : undefined;
+          targetedCards = targetedClassified
+            ? [...targetedClassified.matched, ...targetedClassified.partiallyMatched]
+            : selectCards(targetedUniversities, constraints, question);
+        } catch (error) {
+          targetedError = error instanceof Error ? error.message : String(error);
+        }
+        const targetedQueryMs = Date.now() - targetedStart;
+        logShadowParity(computeShadowParity({
+          requestId,
+          intent,
+          legacyCards: cards,
+          targetedCards,
+          targeted,
+          targetedError,
+          legacyQueryMs,
+          legacyTotalFactRows: countTotalFactRows(universities),
+          targetedQueryMs,
+        }));
+      } catch (shadowError) {
+        // The comparison/logging step itself must be just as inert as the
+        // query it's comparing -- a bug here must never turn into a 500 for
+        // the user (this whole block sits inside handleChatRequest's own
+        // try/catch, which otherwise WOULD turn an uncaught throw here into
+        // exactly that).
+        console.error("[chat-v2] targeted-query-shadow failed", shadowError);
+      }
+    }
     if (!cards.length) {
       return NextResponse.json({
         answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",

@@ -1,4 +1,4 @@
-import { fallbackUniversities } from "./fallback-data";
+import { fallbackUniversities } from "./fallback-data.ts";
 import type { ExchangeProgram, ProfileSection, University } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -22,7 +22,7 @@ type SamuelUniversityRow = {
   exchange_url: string | null;
 };
 
-type CanonicalFactRow = {
+export type CanonicalFactRow = {
   university_id?: string;
   field_key: string;
   topic: string;
@@ -118,7 +118,7 @@ async function requestAll<T>(path: string, pageSize = 1000): Promise<T[]> {
   return rows;
 }
 
-function factMap(facts: CanonicalFactRow[]): Map<string, CanonicalFactRow> {
+export function factMap(facts: CanonicalFactRow[]): Map<string, CanonicalFactRow> {
   const mapped = new Map<string, CanonicalFactRow>();
   for (const fact of facts) {
     if (!mapped.has(fact.field_key)) mapped.set(fact.field_key, fact);
@@ -126,12 +126,12 @@ function factMap(facts: CanonicalFactRow[]): Map<string, CanonicalFactRow> {
   return mapped;
 }
 
-function profileFromFacts(facts: CanonicalFactRow[]): Record<string, unknown> | undefined {
+export function profileFromFacts(facts: CanonicalFactRow[]): Record<string, unknown> | undefined {
   const row = facts.find((fact) => fact.field_key === "ui_profile_json");
   return asRecord(row?.value_json);
 }
 
-function sourceLinks(profile: Record<string, unknown> | undefined, facts: Map<string, CanonicalFactRow>): Record<string, unknown>[] {
+export function sourceLinks(profile: Record<string, unknown> | undefined, facts: Map<string, CanonicalFactRow>): Record<string, unknown>[] {
   const links = asArray(profile?.source_links);
   if (links.length) return links;
   return [...facts.values()]
@@ -145,7 +145,7 @@ function sourceLinks(profile: Record<string, unknown> | undefined, facts: Map<st
     }));
 }
 
-function sectionsFromFacts(profile: Record<string, unknown> | undefined, facts: Map<string, CanonicalFactRow>): ProfileSection[] {
+export function sectionsFromFacts(profile: Record<string, unknown> | undefined, facts: Map<string, CanonicalFactRow>): ProfileSection[] {
   const profileSections = asArray(profile?.sections).map((item) => ({
     section_number: cleanText(item.section_number, ""),
     section_title: cleanText(item.section_title, ""),

@@ -122,7 +122,8 @@ export function selectCards(universities: University[], constraints: QueryConstr
       .sort((a, b) => {
         const costDiff = a.cost.normalizedKrw - b.cost.normalizedKrw;
         if (costDiff !== 0) return costDiff;
-        return b.cost.categoryCount - a.cost.categoryCount;
+        const categoryDiff = b.cost.categoryCount - a.cost.categoryCount;
+        return categoryDiff !== 0 ? categoryDiff : a.university.id.localeCompare(b.university.id);
       })
       .slice(0, constraints.topN);
 
@@ -133,16 +134,26 @@ export function selectCards(universities: University[], constraints: QueryConstr
     .map((university) => ({ university, score: scoreUniversity(university, constraints.intent, question) }))
     .filter(({ score }, index) => score > 0 || (constraints.intent === "general" && index < constraints.topN))
     .sort((a, b) => {
-      if (constraints.quotaMode === "sort_desc") return (quotaValue(b.university) ?? -1) - (quotaValue(a.university) ?? -1);
-      if (constraints.sortGpaLowest) {
-        const aGpa = minimumGpaRequirement(a.university);
-        const bGpa = minimumGpaRequirement(b.university);
-        const aNormalized = aGpa ? (aGpa.value / aGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
-        const bNormalized = bGpa ? (bGpa.value / bGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
-        return aNormalized - bNormalized;
-      }
-      if (constraints.sortDeadlineEarliest) return earliestMatchingDeadlineTime(a.university, constraints) - earliestMatchingDeadlineTime(b.university, constraints);
-      return b.score - a.score;
+      // Every branch falls back to a university.id tie-break when its own
+      // primary comparison is a genuine tie (same score, same quota, same
+      // GPA, same deadline) -- without it, a tie resolves by array input
+      // order, which the legacy full-load path and the Targeted Query
+      // Builder's candidate-filtered path do not share (see filters.ts's
+      // housingQualitySignalScore comment for the concrete case this fixed).
+      const primary = constraints.quotaMode === "sort_desc"
+        ? (quotaValue(b.university) ?? -1) - (quotaValue(a.university) ?? -1)
+        : constraints.sortGpaLowest
+          ? (() => {
+              const aGpa = minimumGpaRequirement(a.university);
+              const bGpa = minimumGpaRequirement(b.university);
+              const aNormalized = aGpa ? (aGpa.value / aGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
+              const bNormalized = bGpa ? (bGpa.value / bGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
+              return aNormalized - bNormalized;
+            })()
+          : constraints.sortDeadlineEarliest
+            ? earliestMatchingDeadlineTime(a.university, constraints) - earliestMatchingDeadlineTime(b.university, constraints)
+            : b.score - a.score;
+      return primary !== 0 ? primary : a.university.id.localeCompare(b.university.id);
     })
     .slice(0, constraints.topN);
 
@@ -155,16 +166,23 @@ export function selectClassifiedCards(universities: University[], constraints: Q
     items
       .map((item) => ({ item, score: scoreUniversity(item.university, constraints.intent, question) }))
       .sort((a, b) => {
-        if (constraints.quotaMode === "sort_desc") return (quotaValue(b.item.university) ?? -1) - (quotaValue(a.item.university) ?? -1);
-        if (constraints.sortGpaLowest) {
-          const aGpa = minimumGpaRequirement(a.item.university);
-          const bGpa = minimumGpaRequirement(b.item.university);
-          const aNormalized = aGpa ? (aGpa.value / aGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
-          const bNormalized = bGpa ? (bGpa.value / bGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
-          return aNormalized - bNormalized;
-        }
-        if (constraints.sortDeadlineEarliest) return earliestMatchingDeadlineTime(a.item.university, constraints) - earliestMatchingDeadlineTime(b.item.university, constraints);
-        return b.score - a.score;
+        // See the matching comment in selectCards -- every branch needs a
+        // deterministic university.id tie-break so a genuine tie doesn't
+        // silently resolve by array input order instead.
+        const primary = constraints.quotaMode === "sort_desc"
+          ? (quotaValue(b.item.university) ?? -1) - (quotaValue(a.item.university) ?? -1)
+          : constraints.sortGpaLowest
+            ? (() => {
+                const aGpa = minimumGpaRequirement(a.item.university);
+                const bGpa = minimumGpaRequirement(b.item.university);
+                const aNormalized = aGpa ? (aGpa.value / aGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
+                const bNormalized = bGpa ? (bGpa.value / bGpa.scale) * 4.5 : Number.MAX_SAFE_INTEGER;
+                return aNormalized - bNormalized;
+              })()
+            : constraints.sortDeadlineEarliest
+              ? earliestMatchingDeadlineTime(a.item.university, constraints) - earliestMatchingDeadlineTime(b.item.university, constraints)
+              : b.score - a.score;
+        return primary !== 0 ? primary : a.item.university.id.localeCompare(b.item.university.id);
       })
       .slice(0, limit)
       .map(({ item, score }) => {

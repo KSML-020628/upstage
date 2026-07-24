@@ -9,6 +9,7 @@ import {
 } from "../display/present-fact";
 import { firstSource, rowSource, universitySources } from "./sources";
 import { CURRENCY_TO_KRW } from "./supabase-facts";
+import { deadlineRowTime } from "./deadline-dates.ts";
 import { LANGUAGE_TEST_ALIASES } from "./types";
 import type {
   ConditionCheck,
@@ -70,6 +71,19 @@ export function sectionText(university: University, intent: Intent) {
     .join("\n");
 }
 
+// Bounded, row-count-independent housing score: provided (any row not
+// explicitly unavailable), guaranteed (any row explicitly true), and
+// verified (any row reviewer-approved). Mirrors the exact fields
+// evaluateUniversity's own housing_available/housing_guaranteed checks use,
+// so two hydrations of the same real-world housing facts score identically
+// regardless of how many rows either data source happens to have.
+function housingQualitySignalScore(rows: Record<string, unknown>[]) {
+  const provided = rows.some((row) => row.housing_available !== false);
+  const guaranteed = rows.some((row) => row.housing_guaranteed === true || row.is_guaranteed === true);
+  const verified = rows.some((row) => row.review_status === "approved");
+  return (provided ? 4 : 0) + (guaranteed ? 4 : 0) + (verified ? 2 : 0);
+}
+
 export function scoreUniversity(university: University, intent: Intent, question: string) {
   const program = programOf(university);
   let score = 0;
@@ -80,7 +94,19 @@ export function scoreUniversity(university: University, intent: Intent, question
   if (university.country && q.includes(normalizeSearchText(university.country))) score += 5;
   if (university.city && q.includes(normalizeSearchText(university.city))) score += 4;
 
-  if (intent === "housing") score += (program?.housing_options?.length ?? 0) * 4;
+  // Scored by qualitative signal (provided/guaranteed/verified), not row
+  // count. Legacy's housing_options comes from the ui_profile_json blob
+  // while the Targeted Query Builder's comes from the separate, structured
+  // housing_facts table -- the two are independently extracted and can
+  // disagree on row count for the same university even when they fully
+  // agree on the actual housing_guaranteed/housing_available facts. A
+  // `.length * 4` score let that row-count divergence alone flip a top-N
+  // ranking tie between the two paths (confirmed live: a housing-guarantee
+  // recommendation query classified the same 7 universities as "met"/
+  // "unknown" identically on both sides, yet the final top-7 cut still
+  // swapped one university for another purely because of row-count-driven
+  // score differences).
+  if (intent === "housing") score += housingQualitySignalScore(program?.housing_options ?? []);
   if (intent === "language") score += (program?.language_requirements?.length ?? 0) * 4;
   if (intent === "cost") score += ((program?.estimated_costs?.length ?? 0) + (program?.housing_options?.length ?? 0)) * 3;
   if (intent === "deadline") score += (program?.application_deadlines?.length ?? 0) * 4;
@@ -467,12 +493,7 @@ export function quotaValue(university: University) {
   return Number.isFinite(value) ? value : undefined;
 }
 
-export function deadlineRowTime(row: Record<string, unknown>) {
-  const text = cleanText(row.deadline_date, cleanText(row.date, cleanText(row.deadline_text)));
-  const iso = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-  if (iso) return Date.parse(iso);
-  return undefined;
-}
+export { deadlineRowTime } from "./deadline-dates.ts"; // re-exported for cards.ts's existing import
 
 function deadlineSemesterOf(row: Record<string, unknown>): DeadlineSemester | undefined {
   const text = normalizeSearchText(`${cleanText(row.semester)} ${cleanText(row.deadline_text)}`);
