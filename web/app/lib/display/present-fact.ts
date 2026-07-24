@@ -1,3 +1,5 @@
+import { normalizeTriStateFlag } from "../chat/utils.ts";
+
 export type FactRow = Record<string, unknown>;
 
 export type PresentationStatus = "confirmed" | "unknown" | "conflict";
@@ -145,7 +147,7 @@ export function presentHousingApplication(row: FactRow): PresentedField {
 
 export function presentHousingGuarantee(row: FactRow): PresentedField {
   const base = baseField(row, "housing_guaranteed", "배정 보장");
-  const value = row.housing_guaranteed ?? row.is_guaranteed;
+  const value = normalizeTriStateFlag(row.housing_guaranteed ?? row.is_guaranteed);
   if (value === true) return { ...base, status: rowStatus(row), value: "보장" };
   if (value === false) return { ...base, status: rowStatus(row), value: "명시적으로 보장되지 않음" };
   return { ...base, status: rowStatus(row) === "conflict" ? "conflict" : "unknown" };

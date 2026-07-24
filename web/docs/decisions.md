@@ -921,3 +921,355 @@ dev server (32/32, unchanged), a live Targeted-flag-ON integration run
 to the earlier config E run, including the corrected follow-up case
 showing `followup_not_eligible`), and the widget-shaped sessionId
 simulation above.
+
+## Phase 3B step 4: compound-condition recommendation Targeted-primary canary
+
+Branched from `origin/main` (Phase 3B step 2's merged state) -- Phase 3B
+step 3 (production canary pre-preparation for the single-university path)
+is a separate, still-unmerged branch and intentionally not a dependency of
+this one. `targeted-primary.ts`, `route.ts`'s single-university fast path,
+and their existing tests are untouched by this step.
+
+**Scope**: region/country include-exclude, language test+score(+subscore),
+deadline before/after/year/semester, housing available/guaranteed, major,
+topN, and combinations of these -- recommendation queries only (no named
+university resolved). Explicitly out of scope this step: named-university
+comparisons (2+ resolved targets), follow-up re-ranking,
+cost/quota/gpa/official-source-driven recommendations, and
+course_restrictions-primary queries -- all of these still go through
+Legacy, structurally enforced by `attemptTargetedRecommendation`'s own
+eligibility gate, not left to intent alone.
+
+**Architecture** (`app/lib/chat/targeted-recommendation.ts`): a SEPARATE
+fast path from the single-university one, attempted after it (only when
+the single-university path wasn't eligible or fell back), still before
+`getChatUniversities()`'s full load. Candidate resolution is deliberately
+narrow in what it excludes: `resolveComplexCandidateIds` only ever filters
+by region/country (via the catalog's own `region`/`country` fields --
+always-known, never an "unknown"-capable condition for any university), and
+never narrows by language score, deadline date, housing, or major at the
+SQL level. This makes candidate recall 100% **by construction** for a
+request this path attempts, not something validated per-request against a
+full legacy load (which would defeat the entire point of a pre-load fast
+path) -- language/housing/deadline/major conditions are left for the
+shared `evaluateUniversity`/`selectClassifiedCards`/`selectCards` to
+classify AFTER hydration, exactly as Legacy does. No separate
+Targeted-only evaluator or ranker exists anywhere in this file.
+
+**Separate feature flags**: `CHAT_TARGETED_RECOMMENDATION_ENABLED` /
+`CHAT_TARGETED_RECOMMENDATION_CANARY_RATE`, parsed identically to (but
+read completely independently of) the single-university
+`CHAT_TARGETED_PRIMARY_*` pair -- two separate `process.env` reads with no
+shared state, so a problem in one is revertible without touching the
+other (live-verified: flipping the recommendation flag off while the
+single-university flag stays on doesn't touch it, by construction). The
+canary key is also salted separately (`rec:${sessionId}` vs the raw
+`sessionId`), so a session's two canary assignments are independent.
+
+**Test-only fault injection**: a dependency-injection seam
+(`TargetedRecommendationDeps`) mirroring Phase 3B step 3's mechanism for
+the single-university path -- `resolveComplexCandidateIds`/
+`queryRelevantUniversityFacts`/`fetchLegacyFallbackFields`/`selectCards`/
+`selectClassifiedCards` can each be overridden per-call, defaulting to the
+real implementations; route.ts's real call site never passes overrides.
+Gated behind the same dedicated `CHAT_TEST_FAULT_INJECTION=true` env var
+(never to be set in production) plus a request header
+(`x-test-inject-recommendation-fault`), reusing the pattern already
+established and documented for the single-university path.
+
+**Live parity testing (14 canonical scenarios, Legacy-forced vs
+Targeted-forced, same session per scenario)**: 12/14 matched exactly on
+every deterministic card field (university_id, match_status,
+condition_checks, unknown_fields, fact_bundle) -- the `answer` text itself
+is excluded from this comparison since it includes the reasoner's
+free-text narrative, which is not perfectly deterministic run-to-run even
+for the identical question (a real LLM call). Two findings from the 2
+non-matching scenarios:
+
+**1. Real bug found and fixed**: `groundedRequestedFields` was preferring a
+freshly re-computed `grounded.requestedFields.value` (from a second,
+separate `groundPlannerFields` call inside this file) over the FINAL
+`constraints.requestedFields` route.ts already computed -- whenever the
+Planner's own raw plan claimed a broader requestedFields set than what the
+question text actually grounds, this surfaced as an EXTRA fact_bundle
+entry (e.g. `application_deadlines` appearing on a pure housing-guarantee
+query with no deadline condition at all) that Legacy's own
+`cards.ts::requestedFactBundle()` -- which always unions `primaryIntent`
+with the FINAL `constraints.requestedFields`, never a separately-derived
+value -- never showed for the identical constraints object. Fixed: always
+union in `args.constraints.requestedFields` directly; `groundPlannerFields`
+is still called (its `.issues` array is a legitimate, separate
+`planner_grounding_issue` fallback trigger), just no longer used to
+override which fields get fetched.
+
+**2. Pre-existing data-shape inconsistency discovered, not introduced by
+this step**: even after the fix above, scenario 4 ("기숙사 배정이 보장되는
+대학을 추천해줘", no region filter -- the broadest, most scoring-sensitive
+case) still shows a different pair of universities in its top-4 cutoff
+between Legacy and Targeted. Both sides are independently, perfectly
+stable across repeated runs (confirmed 20/20 identical on the Targeted
+side) -- this is a deterministic scoring difference, not flakiness.
+Root-caused live: at least one university's `ui_profile_json` blob stores
+housing-guarantee status as `is_guaranteed: "Yes"` (a **string**), while
+the structured `housing_facts` table stores the equivalent fact as
+`housing_guaranteed: true` (a **boolean**). `scoreUniversity`'s
+`housingQualitySignalScore` (and `evaluateUniversity`'s own guaranteed
+check) test `row.is_guaranteed === true` -- strict equality, which never
+matches the string `"Yes"`. Legacy prefers the blob's `housing_options`
+over the structured table whenever the blob is non-empty (`asArray(profile
+?.housing_options).length ? ... : ...` in `supabase.ts`'s
+`exchangeProgram()`), so Legacy's own score for this university silently
+loses the +4 "guaranteed" bonus that the SAME fact, read from the
+structured table (as Targeted does), correctly grants -- shifting exactly
+which universities land in a tight top-4 cutoff for a broad,
+unscoped, housing-heavy query. This is a **pre-existing** latent
+inconsistency between the two data sources this codebase has carried since
+Phase 3A first introduced structured-table reads (the same class of issue
+`computeShadowParity`'s `factValueParity` metric exists to catch, not
+something Phase 3B step 4 created) -- confirmed the affected university IS
+present with IDENTICAL fact_bundle content on both sides once the
+candidate pool is narrowed (scenario 12, Europe-scoped, includes it
+correctly in both), meaning **candidate recall and per-university
+classification remain exact**; only the global, unscoped top-N ranking
+cutoff can differ. Not fixed as part of this step (it is a Legacy-side
+data-normalization gap unrelated to this file's own logic, and fixing it
+risks changing Legacy's existing behavior for other callers without
+separate, dedicated testing) -- flagged here and in the completion report
+as a known, monitored caveat instead of silently ignored.
+
+**Candidate-recall shadow observability** (`shadow-parity.ts`'s new
+`computeComplexRecall`/`logComplexRecallParity`): computed inside the
+existing Phase 3A shadow block (same `SHADOW_ENABLED`/`SHADOW_SAMPLE_RATE`
+gate), independent of whether `CHAT_TARGETED_RECOMMENDATION_ENABLED` is
+actually on -- this must be observable BEFORE ever raising the real canary
+rate, not just after. Reuses `attemptTargetedRecommendation` itself
+(forced `enabled: true, canaryRate: 1`) for the shadow-side computation
+rather than a separate reimplementation, so the measurement can never
+silently drift out of sync with the real path's own logic. Live-verified:
+`candidateRecall: 1` for a real Europe+IELTS recommendation query with
+shadow mode on and the real recommendation flag off.
+
+**Repeat stability**: scenario 4 (기숙사 배정 보장, no region filter) and
+scenario 7 (region+language+deadline+housing, the most condition-dense
+combination) each run 20 times against the Targeted-forced path --
+20/20 identical university IDs, order, and card count for both.
+
+**Kill switch**: live-verified independently of the single-university
+one -- a session actively canary-selected into `targeted_recommendation`
+immediately reverted to `flag_disabled` after restarting with
+`CHAT_TARGETED_RECOMMENDATION_ENABLED=false`, with a normal HTTP 200 and
+the same 7 cards Legacy would produce for that query, no code deploy
+involved.
+
+**Not done in this step**: production env vars left untouched (defaults
+still 0/off); no merge to main; no expansion to named-university
+comparisons, follow-up re-ranking, or cost/quota/gpa/official-source
+conditions; no removal of the Legacy path; the is_guaranteed
+string-vs-boolean inconsistency found above was documented, not fixed.
+
+## Phase 3B integration: merging steps 3 and 4, production fault-injection
+## hard block, housing-guarantee normalization, candidate-recall hardening
+
+Branched from `origin/main` (still Phase 3B step 2's merged state -- neither
+step 3 nor step 4 had been merged yet). Merged `solar-pipeline-phase3b-
+prod-canary-prep` (step 3) first (fast-forward, no conflicts against this
+branch's base), then `solar-pipeline-phase3b-complex-canary` (step 4),
+which conflicted in `route.ts` (5 regions: import block, the two
+fault-injection-deps functions, a comment, and a trivial requestStart
+comment) and `docs/decisions.md` (both branches' own new sections,
+resolved by keeping both in sequence). `targeted-query.ts`,
+`shadow-parity.ts`, `targeted-primary.ts`, `targeted-recommendation.ts`,
+and both branches' test files auto-merged byte-identical to their source
+branches (`diff --strip-trailing-cr` against each source branch's own
+version came back empty) -- step 3 never touched targeted-query.ts, so
+step 4's own version applied cleanly.
+
+**Two silent-merge bugs found by re-reading the merged result, not by
+git's own conflict markers** (git only flags textual overlaps -- these
+were semantic breaks from two branches editing nearby-but-different lines
+of the same growing function): (1) the recommendation-success call to
+`buildFinalResponse` was missing the `requestStart` field step 3 had just
+made required, which would have silently produced `NaN`/wrong
+`totalResponseMs` for every successful complex-recommendation response --
+fixed. (2) both fast paths' fault-injection blocks declared their own
+`const testFaultReason` in the same function scope (a real
+`Cannot redeclare block-scoped variable` TypeScript error, not silent, but
+still a merge-only defect) -- the recommendation path's own variable
+renamed to `recommendationTestFaultReason`.
+
+### [2] Fault injection is now hard-blocked in production, not just gated by an env var that "should never be set"
+
+`TEST_FAULT_INJECTION_ALLOWED` (route.ts) now requires
+`process.env.NODE_ENV !== "production"` **in addition to**
+`CHAT_TEST_FAULT_INJECTION === "true"` -- both the single-university and
+recommendation fault-injection call sites were updated to read this one
+shared, hardened constant (the single-university path had its own inline
+`process.env.CHAT_TEST_FAULT_INJECTION === "true"` check pre-integration,
+missing the production check entirely; now unified). Live-verified against
+a REAL production build (`next build` + `next start`, which correctly sets
+`NODE_ENV=production` -- unlike `next dev`, which always forces
+`NODE_ENV=development` regardless of what's passed on the command line,
+making this specific gate impossible to truly test under dev mode): with
+`CHAT_TEST_FAULT_INJECTION=true` set AND the `x-test-inject-recommendation-
+fault: targeted_error` header sent, the request still succeeded normally
+via `targeted_recommendation` -- the fault was completely ignored, exactly
+as required.
+
+### [3] housing_guaranteed / is_guaranteed normalization -- shared, not Targeted-only
+
+`normalizeTriStateFlag(value): boolean | undefined` (`app/lib/chat/
+utils.ts`) is the single shared normalizer: `true/"true"/"yes"/"y"/1` ->
+`true`; `false/"false"/"no"/"n"/0` -> `false` (case/whitespace-insensitive);
+everything else (`null`, `undefined`, `""`, unrecognized strings/numbers)
+-> `undefined` (unknown -- never coerced to `false`). Applied at the ONE
+shared point both Legacy-hydrated and Targeted-hydrated `University`
+objects converge -- `filters.ts`'s `housingQualitySignalScore`,
+`passesStructuredFilters`, and `evaluateUniversity` -- rather than fixing
+N separate data-sourcing paths; also applied in `present-fact.ts`'s
+`presentHousingGuarantee` (the SAME bug existed in the university detail
+page's own display logic, found while auditing this: `value === true`/
+`value === false` against a possibly-string `is_guaranteed` silently fell
+through to "확인 필요" for a real, known "Yes"/"No" fact). 15 new unit
+tests (`tests/housing-guarantee-normalization.test.ts`) verify the
+normalizer directly, that `evaluateUniversity`'s condition check is
+source-shape-independent (a Legacy-shaped `is_guaranteed: "Yes"` row and a
+Targeted-shaped `housing_guaranteed: true` row for the same real-world fact
+produce byte-identical `condition_checks`), that `passesStructuredFilters`
+recognizes both shapes, and that `presentHousingGuarantee` does too.
+
+Confirmed via live re-test that scenario 12 ("기숙사 배정이 보장되는 유럽
+대학을 추천해줘", Europe-scoped) now matches exactly between Legacy and
+Targeted -- it did not before this fix (see step 4's own entry above).
+
+**Root-causing scenario 4 further surfaced a SECOND, still-unresolved
+ranking-cutoff difference** (see the 14-scenario table below) -- reported
+honestly rather than claimed fixed. Direct inspection confirmed candidate
+recall, match_status (matched/partial/excluded), and condition_checks are
+byte-identical between Legacy and Targeted for every university in this
+scenario; only which 2 of several apparently-equally-scored "matched"
+universities land in the visible top-4 cutoff differs, and that
+difference is itself perfectly stable/deterministic on EACH side
+independently (confirmed 20/5 repeat runs on the Targeted/Legacy sides
+respectively, always the same 2 winners on each side) -- meaning this is
+not request-to-request noise, but a genuine, still-not-fully-identified
+scoring divergence between the two paths for this one broad, unscoped,
+housing-heavy query shape. Investigated and ruled out as the cause:
+`housingQualitySignalScore` itself (recomputed by hand for all 4 candidate
+universities on both the structured `housing_facts` table and the blob,
+post-fix -- all four tie at the same 10 points on both sources), the
+catalog (all 4 candidates are present), and `queryRelevantUniversityFacts`
+row retrieval (directly reproduced the real 54-candidate housing fetch --
+all 4 candidates' real fact rows are correctly retrieved, not silently
+dropped by pagination/limits). The remaining hypothesis (an
+`scoreUniversity` corpus/token-matching contribution from `summary`/
+`profile_sections` differing between the two hydration paths for these
+specific universities) was not confirmed within this step's time budget.
+Not fixed -- flagged as a known, remaining caveat, not silently left
+unmentioned.
+
+### [4] Candidate recall: measured, not just claimed "100% by design"
+
+The catalog's own `region` field (`deriveRegion`, university-catalog.ts) is
+derived from `country` alone via the SAME shared `EUROPE_COUNTRIES`/
+`ASIA_COUNTRIES`/`AMERICAS_COUNTRIES` sets `filters.ts`'s
+`isEuropeanUniversity`/`isAsianUniversity`/`isAmericasUniversity` use (no
+drift risk there -- confirmed only one definition exists, in `utils.ts`,
+imported by both) -- **but `isEuropeanUniversity` is still strictly
+broader**: it also falls back to matching known city/university-name text
+(`paris|rennes|lyon|bristol|sheffield|...`) that `UniversityCatalogItem`
+doesn't even carry a field for (no `city` field on the catalog item at
+all). A university whose `country` the catalog can't classify into a
+region, but whose city/name Legacy's own check WOULD recognize, could
+previously have been silently excluded from Targeted's candidate pool by
+an inclusive region filter -- a real, structural recall gap, not just a
+hypothetical one, even though the CURRENT real catalog (54/54 universities)
+happens to have `region` and `country` populated for every entry today
+(verified live: `catalog.filter(c => !c.region).length === 0`,
+`catalog.filter(c => !c.country).length === 0`).
+
+Fixed in `filterCatalogByRegionCountry` (targeted-query.ts, shared by both
+the single-university shadow candidate search and the complex-
+recommendation path): an item whose `region`/`country` is UNKNOWN is now
+NEVER excluded by an INCLUSIVE filter (previously it was -- `!(item.region
+&& regions.has(item.region))` treated "unknown" the same as "known and not
+matching"), only by an EXCLUSIVE filter matching a KNOWN, confirmed value.
+Over-inclusion here can never produce a wrong final answer -- the shared
+evaluator (which uses the more accurate check) still correctly filters out
+any wrongly-included candidate later; only under-inclusion breaks recall.
+7 new unit tests cover this directly with a catalog fixture carrying
+`region: undefined`/`country: undefined` entries, confirming they survive
+both inclusive and exclusive filters while a KNOWN-but-non-matching entry
+is still correctly excluded (the fix is scoped to unknowns only, not a
+blanket broadening).
+
+**Actually measured `candidateRecall` (not just "1 by design")**: live,
+via `[chat-v2] complex-recall-shadow` (`SHADOW_ENABLED=true`, real 54-
+university dataset, real Planner calls) across 5 diverse real queries --
+region-only (Europe), region+deadline (Asia-excluded + date), housing-only,
+housing-guarantee-only, and country+language (UK + IELTS) -- all 5 reported
+`candidateRecall: 1` (100%). This is the real, measured value against the
+CURRENT dataset, not an assumption; it would need re-measurement if the
+catalog's region/country completeness ever changed.
+
+### [5] Final pipeline-completion log (not a new log name -- the existing one, enriched)
+
+Rather than adding a parallel log, `[chat-v2] pipeline` (v2Response,
+already fires at response completion with an accurate `reasonerCallCount`
+-- unlike the earlier `[chat-v2] targeted-primary`/`targeted-recommendation`
+decision-time logs, which fire strictly BEFORE the reasoner is ever
+invoked and so can only ever report 0 for it) now also carries:
+`selectedPath`, `targetedAttempted`, `targetedSucceeded`,
+`legacyLoadTriggered`, `legacyLoadSkipped`, `fallbackReason`,
+`plannerCallCount`, `candidateCount`, `candidateRecall`, `targetedQueryMs`,
+`legacyQueryMs` (alongside its existing `requestId`/`reasonerCallCount`/
+`totalResponseMs`). A `PipelineDecisionSummary` object is threaded through
+`buildFinalResponse` -> `v2Response`, constructed at each of the 3 outcome
+sites: single-university success (`candidateCount: 1, candidateRecall: 1`
+-- one already-confirmed target, not a multi-candidate recall claim in the
+same sense the recommendation path means it), recommendation success
+(`candidateRecall: 1`, guaranteed by construction for a request the path
+actually attempted -- the independently MEASURED value, when available, is
+the separate `[chat-v2] complex-recall-shadow` log, not this field), and
+Legacy fallback (picks whichever of the two fast-path results is
+structurally authoritative for the request shape --
+`catalogExactTargetIds.length === 0` prefers the recommendation path's own,
+more specific reason over the single-university path's generic
+`not_single_target`; any resolved target count prefers the other way --
+`candidateRecall: null` here, since recall's "guaranteed by construction"
+claim only applies to a successful attempt). Live-verified against a real
+production build: a successful recommendation response's final pipeline
+log showed `reasonerCallCount: 1` (correct, non-zero) alongside
+`selectedPath: 'targeted_recommendation'`, `candidateCount: 34`,
+`candidateRecall: 1`; a fallback response (unsupported_condition) showed
+`candidateRecall: null`, `legacyQueryMs: 357` (the real value).
+
+### [6] Full suite count after integration
+
+`npm test` now includes 174 (step 3) + 35 (step 4) tests already counted
+once each (they don't overlap -- step 3 only touched
+targeted-primary.test.ts, step 4 only added targeted-recommendation.test.ts)
+plus this integration step's own 15 (housing-guarantee-normalization) + 7
+(candidate-recall edge cases, added inside targeted-recommendation.test.ts)
+new tests. See the completion report for the exact final suite-by-suite
+count and an explanation of any arithmetic difference from a naive 166+8+35
+sum (the instruction's own estimate already flagged this might not land
+exactly on 209, and asked for an explained count rather than a pass/fail
+against that specific number).
+
+### Live-verified flag-combination matrix
+
+All of: both flags off, single-only on, recommendation-only on, both on,
+both canary rates 0, both canary rates 1, and a request with no
+`sessionId` -- confirmed each flag is read from its own independent
+`process.env` var with no shared state (a session's single-university
+canary assignment and its recommendation canary assignment are
+independently salted, `sessionId` vs `` `rec:${sessionId}` ``), and that
+disabling one flag never affects the other's own eligibility/canary
+decision for the same request.
+
+**Not done in this step**: production env vars left untouched (still
+0/off by default); no merge to main; the integration branch itself was
+pushed to origin, not merged; Legacy path untouched and still fully
+functional (confirmed via the same 14-scenario Legacy-forced capture used
+for parity comparison); the scenario 4/6 residual ranking-cutoff
+difference was investigated but not fully resolved.

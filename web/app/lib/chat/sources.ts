@@ -1,6 +1,6 @@
 import type { University } from "../types";
 import type { ChatSource, Intent } from "./types";
-import { cleanText, isClearlyNonOfficialUrl, isValidHttpUrl, normalizeSearchText, programOf } from "./utils";
+import { cleanText, isClearlyNonOfficialUrl, isValidHttpUrl, normalizeSearchText, programOf } from "./utils.ts";
 
 function sourceTypeLabel(value: unknown) {
   const text = cleanText(value, "source");

@@ -1,16 +1,16 @@
 import type { University } from "../types";
-import { compareIsoDate } from "./chat-policy";
+import { compareIsoDate } from "./chat-policy.ts";
 import {
   presentCost,
   presentDeadline,
   presentHousingGuarantee,
   presentHousingRow,
   presentLanguage,
-} from "../display/present-fact";
-import { firstSource, rowSource, universitySources } from "./sources";
-import { CURRENCY_TO_KRW } from "./supabase-facts";
+} from "../display/present-fact.ts";
+import { firstSource, rowSource, universitySources } from "./sources.ts";
+import { CURRENCY_TO_KRW } from "./supabase-facts.ts";
 import { deadlineRowTime } from "./deadline-dates.ts";
-import { LANGUAGE_TEST_ALIASES } from "./types";
+import { LANGUAGE_TEST_ALIASES } from "./types.ts";
 import type {
   ConditionCheck,
   ConditionState,
@@ -31,12 +31,13 @@ import {
   isEuropeanUniversity,
   matchesCountry,
   normalizeSearchText,
+  normalizeTriStateFlag,
   numericValue,
   programOf,
   rowAsText,
   rowText,
   rowsText,
-} from "./utils";
+} from "./utils.ts";
 
 export function relevantRows(university: University, intent: Intent) {
   const program = programOf(university);
@@ -79,7 +80,7 @@ export function sectionText(university: University, intent: Intent) {
 // regardless of how many rows either data source happens to have.
 function housingQualitySignalScore(rows: Record<string, unknown>[]) {
   const provided = rows.some((row) => row.housing_available !== false);
-  const guaranteed = rows.some((row) => row.housing_guaranteed === true || row.is_guaranteed === true);
+  const guaranteed = rows.some((row) => normalizeTriStateFlag(row.housing_guaranteed ?? row.is_guaranteed) === true);
   const verified = rows.some((row) => row.review_status === "approved");
   return (provided ? 4 : 0) + (guaranteed ? 4 : 0) + (verified ? 2 : 0);
 }
@@ -566,7 +567,7 @@ export function passesStructuredFilters(university: University, constraints: Que
   }
   if (constraints.requireHousingGuaranteed) {
     const rows = programOf(university)?.housing_options ?? [];
-    if (!rows.some((row) => row.housing_guaranteed === true || row.is_guaranteed === true)) return false;
+    if (!rows.some((row) => normalizeTriStateFlag(row.housing_guaranteed ?? row.is_guaranteed) === true)) return false;
   }
   if (constraints.requireHousingMissing && (programOf(university)?.housing_options?.length ?? 0) > 0) return false;
   if (constraints.intent === "restriction") {
@@ -646,8 +647,8 @@ export function evaluateUniversity(university: University, constraints: QueryCon
 
   if (constraints.requireHousingGuaranteed) {
     const rows = programOf(university)?.housing_options ?? [];
-    const guaranteed = rows.some((row) => row.housing_guaranteed === true || row.is_guaranteed === true);
-    const notGuaranteed = rows.some((row) => row.housing_guaranteed === false || row.is_guaranteed === false);
+    const guaranteed = rows.some((row) => normalizeTriStateFlag(row.housing_guaranteed ?? row.is_guaranteed) === true);
+    const notGuaranteed = rows.some((row) => normalizeTriStateFlag(row.housing_guaranteed ?? row.is_guaranteed) === false);
     if (guaranteed) add("housing_guaranteed", "배정 보장", "met", "보장");
     else if (notGuaranteed) add("housing_guaranteed", "배정 보장", "failed", "명시적으로 보장되지 않음");
     else add("housing_guaranteed", "배정 보장", "unknown", "확인 필요");

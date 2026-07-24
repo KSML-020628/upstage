@@ -11,8 +11,16 @@ import {
   queryRelevantUniversityFacts,
   resolveCandidateUniversityIds,
 } from "../../lib/chat/targeted-query";
-import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
+import { computeShadowParity, computeComplexRecall, logShadowParity, logComplexRecallParity } from "../../lib/chat/shadow-parity";
+import { evaluateUniversity } from "../../lib/chat/filters";
 import { attemptTargetedFastPath, type TargetedPrimaryDeps } from "../../lib/chat/targeted-primary";
+import {
+  attemptTargetedRecommendation,
+  hasComplexRecommendationConditions,
+  hasUnsupportedRecommendationConditions,
+  resolveComplexCandidateIds,
+  type TargetedRecommendationDeps,
+} from "../../lib/chat/targeted-recommendation";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -110,6 +118,32 @@ const SHADOW_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGE
 const TARGETED_PRIMARY_ENABLED = process.env.CHAT_TARGETED_PRIMARY_ENABLED === "true";
 const TARGETED_PRIMARY_CANARY_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_PRIMARY_CANARY_RATE) || 0));
 
+// Phase 3B step 4: a SEPARATE pair of flags for compound-condition
+// recommendation queries (region/country/language/deadline/housing/major
+// combinations), independent of the single-university canary above -- a
+// problem in one must be revertible without touching the other, per the
+// instruction ("복합 추천에 문제가 생겼을 때 추천 경로만 즉시 Legacy로
+// 되돌릴 수 있어야 합니다"). Same fail-closed parsing, same doubly-safe
+// default (both must be set for any real traffic to be routed here).
+const TARGETED_RECOMMENDATION_ENABLED = process.env.CHAT_TARGETED_RECOMMENDATION_ENABLED === "true";
+const TARGETED_RECOMMENDATION_CANARY_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_RECOMMENDATION_CANARY_RATE) || 0));
+
+// Test-only fault injection for both Targeted fast paths (Phase 3B step 3's
+// mechanism, reused here for the recommendation path too) -- only ever read
+// when this dedicated env var is explicitly "true". MUST NEVER be set in
+// Vercel's production environment variables. Deliberately not gated on
+// NODE_ENV === "test": `next dev`/`next build`/`next start` force NODE_ENV
+// to "development"/"production" themselves regardless of what's passed on
+// the command line, so that gate could never be exercised against a real
+// running server. Phase 3B integration step: hard-blocked by
+// NODE_ENV !== "production" as a second, independent gate -- if
+// CHAT_TEST_FAULT_INJECTION were ever mistakenly set in a real production
+// deploy (where NODE_ENV is always "production"), this still evaluates to
+// false and the test header stays fully inert, never just relying on the
+// env var being unset.
+const TEST_FAULT_INJECTION_ALLOWED = process.env.NODE_ENV !== "production"
+  && process.env.CHAT_TEST_FAULT_INJECTION === "true";
+
 // Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
 // shadow query needs to know which fact table the PRIMARY intent alone
 // implies, since cards.ts's own requestedFactBundle() always fetches that
@@ -127,21 +161,24 @@ const INTENT_TO_REQUESTED_FIELD: Partial<Record<Intent, string>> = {
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
-// Phase 3B step 3 requirement: reproduce targeted_error/empty_result/
-// validation_failed WITHOUT mutating real catalog/database rows, via
-// dependency injection rather than corrupting live data. Double-gated so
-// this can never activate in production: (1) the call site below only
-// reads the injection header at all when CHAT_TEST_FAULT_INJECTION=true is
-// explicitly set (a dedicated, purpose-named var, deliberately NOT reusing
-// NODE_ENV -- `next dev`/`next build`/`next start` force NODE_ENV to
-// "development"/"production" themselves regardless of what's passed on the
-// command line, so gating on NODE_ENV === "test" could never actually be
-// exercised against a real running server; this var must never be added to
-// Vercel's production environment variables), and (2) even then, an
-// explicit x-test-inject-targeted-fault header must be present -- a real
-// user request (browser or otherwise) never sends this header, and even if
-// it somehow did, the env var check alone already makes this dead code
-// outside a deliberate test invocation.
+// Phase 3B step 3/4 requirement: reproduce targeted_error/empty_result/
+// validation_failed (single-university path) and targeted_error/
+// empty_candidate_pool/validation_failed (complex-recommendation path)
+// WITHOUT mutating real catalog/database rows, via dependency injection
+// rather than corrupting live data. Double-gated so this can never
+// activate in production: (1) the call site below only reads the
+// injection header at all when TEST_FAULT_INJECTION_ALLOWED is true (see
+// its own definition -- deliberately NOT NODE_ENV === "test", since `next
+// dev`/`next build`/`next start` force NODE_ENV to
+// "development"/"production" themselves regardless of what's passed on
+// the command line, so that gate could never actually be exercised
+// against a real running server; CHAT_TEST_FAULT_INJECTION must never be
+// added to Vercel's production environment variables, and is additionally
+// hard-blocked whenever NODE_ENV === "production" even if it somehow
+// were), and (2) even then, an explicit x-test-inject-*-fault header must
+// be present -- a real user request (browser or otherwise) never sends
+// this header, and even if it somehow did, the env var check alone
+// already makes this dead code outside a deliberate test invocation.
 function buildTestFaultInjectionDeps(reason: string): TargetedPrimaryDeps {
   if (reason === "targeted_error") {
     return {
@@ -155,6 +192,38 @@ function buildTestFaultInjectionDeps(reason: string): TargetedPrimaryDeps {
   }
   if (reason === "validation_failed") {
     return { getUniversity: async () => undefined };
+  }
+  return {};
+}
+
+function buildRecommendationFaultInjectionDeps(reason: string): TargetedRecommendationDeps {
+  if (reason === "targeted_error") {
+    return {
+      queryRelevantUniversityFacts: async () => {
+        throw new Error("test-injected-targeted-error");
+      },
+    };
+  }
+  if (reason === "empty_candidate_pool") {
+    return { resolveComplexCandidateIds: () => [] };
+  }
+  if (reason === "validation_failed") {
+    // A card whose university_id is NOT in the resolved candidate set --
+    // exercises attemptTargetedRecommendation's own self-consistency check
+    // (the same class of bug the Phase 3A.1 shadow re-test caught once
+    // already: candidate resolution silently substituting unrelated
+    // universities into the hydrated set) without needing a real evaluator
+    // bug to occur.
+    const invalidCard = {
+      university_id: "test-injected-invalid-id",
+      university_name: "Test Injected University",
+      country: "", city: "", summary: "", badges: [], highlights: [],
+      action_label: "", action_url: "",
+    };
+    return {
+      selectCards: () => [invalidCard],
+      selectClassifiedCards: () => ({ matched: [invalidCard], partiallyMatched: [], excluded: [] }),
+    };
   }
   return {};
 }
@@ -190,6 +259,36 @@ function isRateLimited(request: Request) {
   return bucket.count > RATE_LIMIT_REQUESTS;
 }
 
+// Phase 3B integration step requirement [5]: a final, response-completion-time
+// summary correlated by requestId, reported alongside [chat-v2] pipeline
+// (which already fires at response completion and already has an accurate
+// reasonerCallCount -- unlike the earlier [chat-v2] targeted-primary/
+// targeted-recommendation decision-time logs, which fire strictly BEFORE the
+// reasoner is ever invoked and so can only ever report 0 for it). Built once
+// per request from whichever fast path was structurally relevant (the
+// single-university one for 1+ resolved targets, the recommendation one for
+// 0 resolved targets -- see the 3 call sites that construct this).
+type PipelineDecisionSummary = {
+  selectedPath: string;
+  targetedAttempted: boolean;
+  targetedSucceeded: boolean;
+  legacyLoadTriggered: boolean;
+  legacyLoadSkipped: boolean;
+  fallbackReason: string | null;
+  plannerCallCount: number;
+  targetedQueryMs: number;
+  legacyQueryMs: number;
+  candidateCount: number;
+  // null when recall isn't a meaningful concept for this outcome (never
+  // attempted at all) -- 1 for a successful attempt (candidate recall is
+  // guaranteed by construction for a request this path actually attempted;
+  // see targeted-recommendation.ts's own comments), not a per-request
+  // measurement against a full legacy load (that would defeat the pre-load
+  // fast path entirely -- the actual MEASURED recall value is only ever
+  // computed by the separate shadow mechanism, [chat-v2] complex-recall-shadow).
+  candidateRecall: number | null;
+};
+
 async function v2Response(args: {
   requestId: string;
   requestStart: number;
@@ -199,6 +298,7 @@ async function v2Response(args: {
   planner: PlannerRun;
   factTablesDegraded: boolean;
   runReasoner: boolean;
+  pipelineDecision: PipelineDecisionSummary;
   shortAnswerOverride?: string;
   extra?: Record<string, unknown>;
 }) {
@@ -245,9 +345,24 @@ async function v2Response(args: {
     reasonerCallCount,
     // Wall-clock time for the whole request, from the top of
     // handleChatRequest to right before this response is returned --
-    // correlates with the earlier [chat-v2] targeted-primary log via
-    // requestId to compute Targeted vs. Legacy response time.
+    // correlates with the earlier [chat-v2] targeted-primary/
+    // targeted-recommendation logs via requestId to compute Targeted vs.
+    // Legacy response time. This is the final, response-completion-time
+    // pipeline summary (requirement [5]) -- unlike the decision-time logs,
+    // reasonerCallCount here is always accurate, since the reasoner call
+    // (if any) has already happened by this point.
     totalResponseMs: Date.now() - args.requestStart,
+    selectedPath: args.pipelineDecision.selectedPath,
+    targetedAttempted: args.pipelineDecision.targetedAttempted,
+    targetedSucceeded: args.pipelineDecision.targetedSucceeded,
+    legacyLoadTriggered: args.pipelineDecision.legacyLoadTriggered,
+    legacyLoadSkipped: args.pipelineDecision.legacyLoadSkipped,
+    fallbackReason: args.pipelineDecision.fallbackReason,
+    plannerCallCount: args.pipelineDecision.plannerCallCount,
+    candidateCount: args.pipelineDecision.candidateCount,
+    candidateRecall: args.pipelineDecision.candidateRecall,
+    targetedQueryMs: args.pipelineDecision.targetedQueryMs,
+    legacyQueryMs: args.pipelineDecision.legacyQueryMs,
   });
   // Split into three distinct observability signals instead of one
   // "reasonerDisplayed" bit -- they can legitimately disagree (e.g. Solar's
@@ -316,8 +431,9 @@ async function buildFinalResponse(args: {
   planner: PlannerRun;
   factTablesDegraded: boolean;
   runReasoner: boolean;
+  pipelineDecision: PipelineDecisionSummary;
 }) {
-  const { requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner } = args;
+  const { requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner, pipelineDecision } = args;
 
   if (!cards.length) {
     return NextResponse.json({
@@ -353,6 +469,7 @@ async function buildFinalResponse(args: {
       requestId,
       requestStart,
       runReasoner,
+      pipelineDecision,
       extra: {
         matched: classified.matched,
         partially_matched: classified.partiallyMatched,
@@ -387,6 +504,7 @@ async function buildFinalResponse(args: {
       requestId,
       requestStart,
       runReasoner: false,
+      pipelineDecision,
       extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
     });
   }
@@ -394,7 +512,7 @@ async function buildFinalResponse(args: {
   if (constraints.requestedFields.length > 1) {
     const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
       extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
     });
   }
@@ -402,7 +520,7 @@ async function buildFinalResponse(args: {
   if (intent === "cost") {
     const detailedAnswer = deterministicDirectCostAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
       extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
     });
   }
@@ -410,7 +528,7 @@ async function buildFinalResponse(args: {
   if (intent === "deadline") {
     const detailedAnswer = deterministicDeadlineAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
       extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
     });
   }
@@ -420,7 +538,7 @@ async function buildFinalResponse(args: {
     const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
     const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
     return v2Response({
-      question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+      question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
       extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
     });
   }
@@ -428,21 +546,23 @@ async function buildFinalResponse(args: {
   if (intent === "housing" || intent === "language") {
     const detailedAnswer = deterministicFactAnswer(cards, intent);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
       extra: { searchMode: searchMode(intent) },
     });
   }
   const detailedAnswer = deterministicGeneralAnswer(cards);
   return v2Response({
-    question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
+    question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner, pipelineDecision,
     extra: { searchMode: searchMode(intent) },
   });
 }
 
 async function handleChatRequest(request: Request) {
   // Captured before any other work so totalResponseMs (logged in
-  // v2Response's pipeline log) reflects true end-to-end wall-clock time,
-  // not just the time from wherever requestId happens to be generated.
+  // v2Response's pipeline log, the targeted-primary/targeted-recommendation
+  // decision logs, and the final [chat-v2] pipeline-summary log) reflects
+  // true end-to-end wall-clock time, not just the time from wherever
+  // requestId happens to be generated.
   const requestStart = Date.now();
   if (isRateLimited(request)) {
     return NextResponse.json({ error: "질문이 너무 빠르게 반복되고 있습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 429 });
@@ -610,10 +730,10 @@ async function handleChatRequest(request: Request) {
     // per-request rolling.
     const canaryKey = sessionId !== "unknown" ? sessionId : null;
     // Test-only fault injection (Phase 3B step 3 requirement) -- see
-    // buildTestFaultInjectionDeps' own comment. CHAT_TEST_FAULT_INJECTION is
-    // never set in production, so testFaultReason is always null and deps
-    // is never passed outside a deliberate test invocation of this route.
-    const testFaultReason = process.env.CHAT_TEST_FAULT_INJECTION === "true"
+    // buildTestFaultInjectionDeps' own comment and TEST_FAULT_INJECTION_ALLOWED's
+    // own comment (hard-blocked whenever NODE_ENV === "production", not just
+    // whenever the env var happens to be unset).
+    const testFaultReason = TEST_FAULT_INJECTION_ALLOWED
       ? request.headers.get("x-test-inject-targeted-fault")
       : null;
     const fastPath = await attemptTargetedFastPath({
@@ -658,22 +778,130 @@ async function handleChatRequest(request: Request) {
       return buildFinalResponse({
         requestId, requestStart, question, intent, constraints, cards,
         classified: undefined, planner, factTablesDegraded: false, runReasoner,
+        pipelineDecision: {
+          selectedPath: fastPath.selectedPath,
+          targetedAttempted: fastPath.targetedAttempted,
+          targetedSucceeded: fastPath.targetedSucceeded,
+          legacyLoadTriggered: !legacyLoadSkipped,
+          legacyLoadSkipped,
+          fallbackReason: fastPath.fallbackReason,
+          plannerCallCount,
+          targetedQueryMs: fastPath.targetedQueryMs,
+          legacyQueryMs: 0,
+          // A single-university lookup has exactly one already-confirmed
+          // target -- "candidate count"/"recall" in the multi-candidate
+          // sense this field means for the recommendation path doesn't
+          // apply the same way, but 1/1 is the correct, honest value: the
+          // one target was found and used.
+          candidateCount: 1,
+          candidateRecall: 1,
+        },
       });
     }
 
-    // Legacy fallback (lazy load): reached only when the fast path above
-    // wasn't eligible or fell back (both already logged) -- everything
-    // from here down is the pre-Phase-3B-step-2 flow, unchanged, just
-    // starting from a full load that now only happens when it's actually
-    // needed.
+    // Phase 3B step 4: compound-condition recommendation queries (region/
+    // country/language/deadline/housing/major combinations) -- a SEPARATE
+    // fast path from the single-university one above, gated by its own
+    // independent flag/canary-rate pair. Only attempted when the
+    // single-university path above wasn't eligible at all (fastPath's
+    // selectedPath is "legacy_default" with a structural, non-canary
+    // reason) or fell back -- either way this request still hasn't reached
+    // getChatUniversities() yet.
+    const recommendationCanaryKey = canaryKey !== null ? `rec:${canaryKey}` : null;
+    const recommendationTestFaultReason = TEST_FAULT_INJECTION_ALLOWED
+      ? request.headers.get("x-test-inject-recommendation-fault")
+      : null;
+    const recommendation = await attemptTargetedRecommendation({
+      enabled: TARGETED_RECOMMENDATION_ENABLED,
+      canaryRate: TARGETED_RECOMMENDATION_CANARY_RATE,
+      canaryKey: recommendationCanaryKey,
+      intent,
+      catalogExactTargetIds,
+      hasFollowupContext,
+      planner,
+      finalInScope,
+      question,
+      constraints,
+      catalog,
+      ...(recommendationTestFaultReason ? { deps: buildRecommendationFaultInjectionDeps(recommendationTestFaultReason) } : {}),
+    });
+    const recommendationLegacyLoadSkipped = recommendation.selectedPath === "targeted_recommendation";
+    // Deliberately excludes the raw question text, sessionId, and any
+    // user-supplied or fact-table content -- every field here is a count, a
+    // boolean, a fixed enum-like reason string, or a duration.
+    console.info("[chat-v2] targeted-recommendation", {
+      requestId,
+      intent,
+      complexRecommendationEligible: recommendation.complexRecommendationEligible,
+      canarySelected: recommendation.canarySelected,
+      candidateCount: recommendation.candidateCount,
+      targetedAttempted: recommendation.targetedAttempted,
+      targetedSucceeded: recommendation.targetedSucceeded,
+      selectedPath: recommendation.selectedPath,
+      legacyLoadTriggered: !recommendationLegacyLoadSkipped,
+      legacyLoadSkipped: recommendationLegacyLoadSkipped,
+      fallbackReason: recommendation.fallbackReason,
+      plannerCallCount,
+      // Always 0 here: this log fires at the fast-path DECISION point,
+      // strictly before the reasoner is ever invoked (that only happens
+      // later, inside v2Response, on whichever cards this request ends up
+      // with -- Targeted or Legacy). The reasoner's own call is already
+      // independently logged and counted by v2Response's existing
+      // reasonerCallCount in [chat-v2] pipeline; this field exists here
+      // only so a dashboard reading this log in isolation doesn't have to
+      // guess it might be non-zero.
+      reasonerCallCount: 0,
+      targetedQueryMs: recommendation.targetedQueryMs,
+      // Always 0 here: legacyQueryMs is only meaningful once
+      // getChatUniversities() actually runs, which -- by construction --
+      // has not happened yet at this log point (that's the entire premise
+      // of a pre-load fast path). See the separate, unconditional
+      // [chat-v2] legacy-load log further down for the real value whenever
+      // this request does fall through to Legacy.
+      legacyQueryMs: 0,
+      totalResponseMs: Date.now() - requestStart,
+    });
+    if (recommendation.selectedPath === "targeted_recommendation" && recommendation.cards) {
+      const cards = recommendation.cards;
+      const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
+      return buildFinalResponse({
+        requestId, requestStart, question, intent, constraints, cards,
+        classified: recommendation.classified, planner, factTablesDegraded: false, runReasoner,
+        pipelineDecision: {
+          selectedPath: recommendation.selectedPath,
+          targetedAttempted: recommendation.targetedAttempted,
+          targetedSucceeded: recommendation.targetedSucceeded,
+          legacyLoadTriggered: !recommendationLegacyLoadSkipped,
+          legacyLoadSkipped: recommendationLegacyLoadSkipped,
+          fallbackReason: recommendation.fallbackReason,
+          plannerCallCount,
+          targetedQueryMs: recommendation.targetedQueryMs,
+          legacyQueryMs: 0,
+          candidateCount: recommendation.candidateCount,
+          // 1 (not a per-request measurement) because candidate recall for
+          // a request this path actually attempted is guaranteed by
+          // construction, not validated against a full legacy load here --
+          // see targeted-recommendation.ts's resolveComplexCandidateIds
+          // comment. The independently MEASURED value (against a real
+          // legacy load) is reported separately by the shadow mechanism,
+          // [chat-v2] complex-recall-shadow.
+          candidateRecall: 1,
+        },
+      });
+    }
+
+    // Legacy fallback (lazy load): reached only when neither fast path above
+    // was eligible or both fell back (all already logged) -- everything
+    // from here down is the pre-Phase-3B flow, unchanged, just starting
+    // from a full load that now only happens when it's actually needed.
     const legacyQueryStart = Date.now();
     const { universities, factTablesDegraded } = await getChatUniversities();
     const legacyQueryMs = Date.now() - legacyQueryStart;
-    // Logged unconditionally (not just when SHADOW_ENABLED's own
+    // Logged unconditionally (not just when the shadow block's own
     // logShadowParity call happens to fire) so legacyQueryMs is always
     // observable and correlatable with the earlier [chat-v2]
-    // targeted-primary log via requestId, regardless of whether shadow
-    // comparison is on.
+    // targeted-primary/targeted-recommendation logs via requestId, letting
+    // a dashboard compute "Legacy 로딩 생략률" without shadow mode enabled.
     console.info("[chat-v2] legacy-load", { requestId, legacyQueryMs, factTablesDegraded });
     if (factTablesDegraded) {
       console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
@@ -933,6 +1161,47 @@ async function handleChatRequest(request: Request) {
           legacyTotalFactRows: countTotalFactRows(universities),
           targetedQueryMs,
         }));
+
+        // Phase 3B step 4 requirement [5]: candidate-recall shadow
+        // measurement for the complex-recommendation path specifically,
+        // independent of whether TARGETED_RECOMMENDATION_ENABLED is
+        // actually on in this environment -- this must be observable BEFORE
+        // ever raising the real canary rate above 0, not just after. Only
+        // computed when this request is structurally the kind of query the
+        // complex-recommendation path would attempt (no resolved
+        // single/multi target, no follow-up, none of the unsupported
+        // conditions) -- for anything else there is no meaningful
+        // "candidate recall" to measure.
+        if (!exactTargets.length && !followupTargets.length
+          && hasComplexRecommendationConditions(constraints)
+          && !hasUnsupportedRecommendationConditions(constraints)) {
+          try {
+            const legacyEligibleUniversityIds = universities
+              .filter((university) => evaluateUniversity(university, constraints).status !== "excluded")
+              .map((university) => university.id);
+            const targetedCandidateUniversityIds = resolveComplexCandidateIds(constraints, catalog);
+            // Forced enabled/rate/canaryKey so this shadow measurement
+            // always attempts the real path's own logic regardless of the
+            // real production flags above -- reusing the exact same
+            // function the real canary would call (not a separate
+            // reimplementation prone to drifting out of sync).
+            const shadowRecommendation = await attemptTargetedRecommendation({
+              enabled: true, canaryRate: 1, canaryKey: "shadow-recall-check",
+              intent, catalogExactTargetIds, hasFollowupContext, planner, finalInScope,
+              question, constraints, catalog,
+            });
+            logComplexRecallParity(computeComplexRecall({
+              requestId,
+              intent,
+              legacyEligibleUniversityIds,
+              targetedCandidateUniversityIds,
+              finalLegacyCards: cards,
+              finalTargetedCards: shadowRecommendation.cards ?? [],
+            }));
+          } catch (complexRecallError) {
+            console.error("[chat-v2] complex-recall-shadow failed", complexRecallError);
+          }
+        }
       } catch (shadowError) {
         // The comparison/logging step itself must be just as inert as the
         // query it's comparing -- a bug here must never turn into a 500 for
@@ -943,13 +1212,46 @@ async function handleChatRequest(request: Request) {
       }
     }
 
-    // Phase 3B step 2: the pre-load fast-path attempt (above, before
+    // Phase 3B step 2/4: the pre-load fast-path attempts (above, before
     // getChatUniversities() ever ran) already tried the Targeted Query
-    // Builder if this request was eligible for it. Reaching this point
-    // means either it wasn't eligible (already logged) or it was attempted
-    // and fell back (also already logged) -- re-attempting Targeted again
-    // now, after paying for the full legacy load, would be pure waste.
-    return buildFinalResponse({ requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner });
+    // Builder if this request was eligible for either of them. Reaching
+    // this point means neither was eligible (already logged) or one was
+    // attempted and fell back (also already logged) -- re-attempting
+    // Targeted again now, after paying for the full legacy load, would be
+    // pure waste.
+    //
+    // Which of the two fast-path results is authoritative for THIS
+    // fallback summary: catalogExactTargetIds.length === 0 means this
+    // request was structurally recommendation-shaped (the single-university
+    // path's own gate would only ever report "not_single_target" for it,
+    // which is far less informative than the recommendation path's own,
+    // specific reason); any resolved target count (1, or 2+ for an
+    // unhandled comparison) means the single-university path's own result
+    // is the relevant one instead.
+    const fallbackSource = catalogExactTargetIds.length === 0 ? recommendation : fastPath;
+    const fallbackLegacyLoadSkipped = fallbackSource.selectedPath === "targeted_primary" || fallbackSource.selectedPath === "targeted_recommendation";
+    return buildFinalResponse({
+      requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner,
+      pipelineDecision: {
+        selectedPath: fallbackSource.selectedPath,
+        targetedAttempted: fallbackSource.targetedAttempted,
+        targetedSucceeded: fallbackSource.targetedSucceeded,
+        legacyLoadTriggered: !fallbackLegacyLoadSkipped,
+        legacyLoadSkipped: fallbackLegacyLoadSkipped,
+        fallbackReason: fallbackSource.fallbackReason,
+        plannerCallCount,
+        targetedQueryMs: fallbackSource.targetedQueryMs,
+        legacyQueryMs,
+        candidateCount: "candidateCount" in fallbackSource ? fallbackSource.candidateCount : 0,
+        // null: this request either was never attempted at all, or was
+        // attempted and fell back -- candidate recall's "guaranteed by
+        // construction" claim only applies to a SUCCESSFUL attempt (see
+        // the two success call sites above), so reporting 1 here would be
+        // misleading. The independently MEASURED value, when available, is
+        // [chat-v2] complex-recall-shadow, not this field.
+        candidateRecall: null,
+      },
+    });
   } catch (error) {
     console.error("Chat route error", error);
     return NextResponse.json({ error: "챗봇 요청 처리 중 오류가 발생했습니다." }, { status: 500 });

@@ -1,5 +1,38 @@
 import type { University } from "../types";
 
+// Shared by BOTH Legacy and Targeted -- neither path has its own copy.
+// Legacy's exchangeProgram() prefers the ui_profile_json blob's own
+// housing_options over the structured housing_facts table whenever the
+// blob is non-empty; the blob stores guarantee status as `is_guaranteed`
+// (sometimes the string "Yes"/"No", not a boolean), while the structured
+// table stores it as `housing_guaranteed` (a proper boolean). Every place
+// that reads either field for guarantee-status LOGIC (filters.ts's
+// evaluateUniversity/passesStructuredFilters/housingQualitySignalScore) or
+// DISPLAY (present-fact.ts's presentHousingGuarantee) must run the raw
+// value through this first, rather than comparing `=== true`/`=== false`
+// directly against whatever shape a specific data source happens to use --
+// a strict boolean comparison against the string "Yes" is false, which
+// silently downgraded a real "guaranteed" fact to "unknown" for any
+// university whose only source was the blob. Found live during Phase 3B
+// step 4 parity testing (see docs/decisions.md): this shifted top-N
+// ranking cutoffs between Legacy and Targeted for broad, unscoped,
+// housing-heavy recommendation queries.
+export function normalizeTriStateFlag(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "yes" || normalized === "y") return true;
+    if (normalized === "false" || normalized === "no" || normalized === "n") return false;
+    return undefined;
+  }
+  return undefined;
+}
+
 export function cleanText(value: unknown, fallback = ""): string {
   if (typeof value !== "string") return fallback;
   const text = value.replace(/\s+/g, " ").trim();
