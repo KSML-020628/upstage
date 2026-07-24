@@ -263,6 +263,91 @@ corresponding legacy `University` object (`legacyProgram?.course_restrictions
 ?? []`, `legacyProgram?.source_links ?? []`) rather than leaving them
 empty and pretending the Targeted Query Builder fetched them.
 
+## Phase 3A.1 follow-up: Q6 ranking-tie root cause, Q7 comparison bug, qa-runner rate limit
+
+The user's own re-review of the Phase 3A.1 report rejected two things this
+doc previously called "acceptable": Q6's ranking-tie mismatch (previously
+filed as within the "semantically equivalent" tolerance) and Q7's
+comparison-query bug (previously filed as a real but out-of-scope legacy
+bug). Both were investigated further and fixed rather than left as
+documented limitations -- the corrected tally is 11/12 exact,
+1/12 exact_with_legacy_fallback, 0 mismatch, 0 equivalent.
+
+**Q6's real root cause was two separate bugs, not an inherent data-source
+limitation.** Direct comparison of the legacy vs. targeted scored pools
+(`scoreUniversity` output for every "matched" university, both sides) showed
+the classification/membership already agreed exactly (22 "matched"
+universities on both sides) -- the divergence was purely in individual
+scores at the tie boundary:
+1. `scoreUniversity`'s housing-intent score was `housing_options.length *
+   4` -- proportional to raw row count. Legacy's `housing_options` comes
+   from the `ui_profile_json` blob, targeted's from the separate
+   `housing_facts` table; the two can have different row counts for
+   identical `housing_guaranteed`/`housing_available` values. Fixed by
+   scoring on bounded qualitative signals (provided/guaranteed/verified)
+   instead -- see `housingQualitySignalScore` in filters.ts.
+2. Even after that fix, the ranking still didn't match, because
+   `hydrateUniversitiesFromCatalog` never carried `profile_sections` over
+   from the legacy University at all (not "different", just absent).
+   `scoreUniversity`'s generic token-matching component reads
+   `sectionText()`, which reads `profile_sections` -- so targeted's corpus
+   text was silently thinner than legacy's, changing scores by 1-2 points
+   for many universities. Fixed by borrowing `profile_sections` from legacy
+   the same way `course_restrictions`/`source_links` already are.
+3. Neither fix alone was sufficient while ties existed with no deterministic
+   tie-break beyond score: `selection.ts`'s sort comparators fell back to
+   `b.score - a.score` with nothing after it, so tied scores resolved by
+   array input order -- and the legacy full-load list and the targeted
+   candidate-filtered list are not the same array, so ties broke
+   differently even once scores matched. Added a `university.id.
+   localeCompare()` tie-break as the last step of every ranking comparator
+   in `selectCards`/`selectClassifiedCards`.
+
+All three together made the housing-guarantee recommendation query's final
+card IDs and order come out byte-for-byte identical between legacy and
+targeted (verified live, requestId `a7c8734a`).
+
+**Q7's root cause: `UNIVERSITY_ALIASES` only ever registered Korean
+nicknames.** "Sheffield와 Bristol을 어학, 기숙사, 마감일 기준으로 비교해줘"
+(bare English short names, Korean particles attached directly, no
+"University of" prefix, no Korean nickname, and critically no "university/
+school/college/대학/학교" keyword anywhere in the sentence) resolved zero
+target universities through either the alias matcher or
+`findTargetUniversities`'s keyword-gated single-token heuristic
+(`selection.ts`), so both `route.ts`'s own `exactTargets` resolution AND the
+Targeted Query Builder's candidate resolution fell through to generic
+recommendation ranking -- the REAL production response, not just the
+shadow comparison, returned 4 unrelated universities. Notably, "Sheffield vs
+Bristol을 비교해줘" and the Korean-nickname/official-full-name variants
+already worked; only the bare-English-plus-Korean-particle phrasing failed.
+Fixed by adding English short-name aliases to `UNIVERSITY_ALIASES` for
+names distinctive enough to be safe (Bristol, Copenhagen, Helsinki,
+Manitoba, Rostock, Sheffield) -- deliberately excluding "University of
+Indonesia" ("Indonesia") and "University of Sao Paulo" ("Sao Paulo") since
+a country name and a major world city name could false-positive-match a
+totally unrelated question. All 4 requested phrasings verified live to
+return exactly the 2 named universities; regression tests added
+(`tests/university-aliases.test.ts`).
+
+**qa-runner's standard (no `--only`) run appeared to hang/fail for reasons
+unrelated to code correctness -- traced to the chat route's own rate
+limiter.** `isRateLimited()` (`route.ts`) allows 10 requests per 60 seconds
+per client, keyed by `x-forwarded-for`; a local `next dev` server has no
+reverse proxy setting that header, so EVERY local request -- real manual
+testing and qa-runner's 32-turn sequential run alike -- shares one
+`"anonymous"` bucket. At `QA_DELAY_MS`'s default 1200ms, qa-runner's first
+~10 turns pass and the remaining ~22 hit 429 within the same 60-second
+window; `postChatWithRetry`'s single retry after a 5s wait usually lands
+inside that same window too. Individually re-running each of the 7 test
+groups as separate processes worked around this (each process's first ~10
+requests fit under the limit) and confirmed 32/32 passed on identical code,
+but that's a workaround, not a fix. Fixed by relaxing
+`RATE_LIMIT_REQUESTS` to a high default outside of `NODE_ENV=production`
+(overridable via `CHAT_RATE_LIMIT_REQUESTS`) -- the strict per-client limit
+is a production abuse guard, not something a single, trusted, sequential
+local test process should be measured against. Verified: standard `node
+qa-runner.mjs` (no flags) now passes 32/32 in one continuous run.
+
 **Row-count fairness fixed.** `countTotalFactRows()` (targeted-query.ts)
 sums every fact array across ALL loaded legacy universities, giving a
 raw-row-count basis for the legacy side that's comparable to
