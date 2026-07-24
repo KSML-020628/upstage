@@ -1,7 +1,17 @@
 import type { ResultCard } from "./types.ts";
 import type { TargetedQueryResult } from "./targeted-query.ts";
 
-export type ShadowParityStatus = "exact" | "equivalent" | "mismatch" | "shadow_error";
+// "exact_with_legacy_fallback" is the same ID/field-level match as "exact",
+// but the targeted result only got there by borrowing one or more fields
+// from the legacy University object (course_restrictions/source_links have
+// no dedicated fact table at all; profile_sections is always borrowed
+// unconditionally by hydrateUniversitiesFromCatalog) rather than the
+// Targeted Query Builder resolving them independently. Kept distinct from
+// plain "exact" so a reader can tell "targeted genuinely reproduced this"
+// from "targeted matched because it copied legacy's own answer for part of
+// it" -- the latter says less about whether a real primary-path migration
+// could drop the legacy full-load entirely.
+export type ShadowParityStatus = "exact" | "exact_with_legacy_fallback" | "equivalent" | "mismatch" | "shadow_error";
 
 export type ShadowParityLog = {
   requestId: string;
@@ -38,6 +48,12 @@ export type ShadowParityLog = {
 
   parityStatus: ShadowParityStatus;
   unsupportedFields: string[];
+  // Fields the targeted-hydrated University actually borrowed from the
+  // legacy object rather than resolving independently -- always includes
+  // "profile_sections" (hydrateUniversitiesFromCatalog borrows it
+  // unconditionally) plus whichever of course_restrictions/source_links
+  // were in unsupportedFields for this request.
+  legacyFallbackFields: string[];
   targetedErrors: string[];
 };
 
@@ -138,6 +154,7 @@ export function computeShadowParity(args: {
       targetedQueryMs: args.targetedQueryMs,
       parityStatus: "shadow_error",
       unsupportedFields: [],
+      legacyFallbackFields: [],
       targetedErrors: args.targetedError ? [args.targetedError] : ["targeted_query_unavailable"],
     };
   }
@@ -159,10 +176,21 @@ export function computeShadowParity(args: {
     .every((status) => status === "exact" || status === "not_applicable");
   const idsEquivalent = missingFromTargeted.length === 0 && extraInTargeted.length === 0;
 
+  // profile_sections is borrowed from legacy unconditionally by
+  // hydrateUniversitiesFromCatalog whenever any candidate was hydrated, so
+  // it's always logged here for full transparency -- but it isn't a
+  // user-visible fact field the way course_restrictions/source_links are,
+  // so it alone doesn't flip the parityStatus split below (that split is
+  // specifically about fields this REQUEST asked for and got via legacy
+  // fallback, i.e. targeted.unsupportedFields).
+  const legacyFallbackFields = [
+    ...new Set([...args.targeted.unsupportedFields, ...(targetedUniversityIds.length ? ["profile_sections"] : [])]),
+  ];
+
   const parityStatus: ShadowParityStatus = args.targeted.errors.length
     ? "mismatch"
     : idsExact && fieldsAllMatch
-      ? "exact"
+      ? (args.targeted.unsupportedFields.length ? "exact_with_legacy_fallback" : "exact")
       : idsEquivalent && fieldsAllMatch
         ? "equivalent"
         : "mismatch";
@@ -189,6 +217,7 @@ export function computeShadowParity(args: {
     targetedQueryMs: args.targetedQueryMs,
     parityStatus,
     unsupportedFields: args.targeted.unsupportedFields,
+    legacyFallbackFields,
     targetedErrors: args.targeted.errors,
   };
 }

@@ -260,9 +260,18 @@ export async function queryRelevantUniversityFacts(
 // evaluateUniversity/passesStructuredFilters/selectCards/
 // selectClassifiedCards functions the legacy path uses -- no separate
 // targeted-only evaluator or ranker is implemented anywhere. Fields with no
-// dedicated fact table (course_restrictions, source_links) are explicitly
-// borrowed from the corresponding legacy University when available, never
-// silently left as an independently-targeted-but-actually-empty value.
+// dedicated fact table (course_restrictions, source_links, profile_sections)
+// are explicitly borrowed from the corresponding legacy University when
+// available, never silently left as an independently-targeted-but-actually-
+// empty value. profile_sections in particular is read by several filters.ts
+// functions (scoreUniversity's sectionText corpus, quotaValue, GPA/major
+// fallback text) -- omitting it doesn't error, it just silently changes
+// those functions' output on the targeted side, which showed up as a real
+// scoring divergence between legacy and targeted for otherwise-identical
+// housing-guarantee classifications (confirmed live: the recommendation
+// pool's classification/membership matched exactly on both sides, but the
+// final top-N ranking still swapped universities because their
+// token-matching scores differed once profile_sections dropped out).
 export function hydrateUniversitiesFromCatalog(
   catalogItems: UniversityCatalogItem[],
   factBundles: UniversityFactBundle[],
@@ -281,6 +290,7 @@ export function hydrateUniversitiesFromCatalog(
       summary: legacy?.summary ?? "",
       latitude: legacy?.latitude ?? 0,
       longitude: legacy?.longitude ?? 0,
+      profile_sections: legacy?.profile_sections,
       exchange_programs: [{
         id: legacyProgram?.id ?? `${item.universityId}-targeted`,
         university_id: item.universityId,

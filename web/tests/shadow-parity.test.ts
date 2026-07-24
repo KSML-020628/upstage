@@ -94,4 +94,36 @@ describe("computeShadowParity: common-evaluator comparison (both sides run the s
     assert.equal(parity.conditionStateParity, "partial_mismatch");
     assert.equal(parity.parityStatus, "mismatch");
   });
+
+  it("reports exact_with_legacy_fallback (not plain exact) when the request's unsupportedFields required legacy fallback, and logs which fields", () => {
+    const legacyCards = [card({ university_id: "u-1", university_name: "A" })];
+    const targetedCards = legacyCards.map((c) => ({ ...c }));
+    // source_links has no dedicated fact table -- the caller (route.ts)
+    // borrows it from the legacy University and reports it via
+    // unsupportedFields, same as course_restrictions.
+    const targeted = targetedResult({ universityIds: ["u-1"], unsupportedFields: ["source_links"] });
+    const parity = computeShadowParity({
+      requestId: "r6", intent: "source", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 10, targetedQueryMs: 8,
+    });
+    assert.equal(parity.parityStatus, "exact_with_legacy_fallback");
+    assert.ok(parity.legacyFallbackFields.includes("source_links"));
+    // profile_sections is always borrowed unconditionally by
+    // hydrateUniversitiesFromCatalog whenever any candidate was hydrated,
+    // so it's logged here too even though it alone wouldn't flip the status.
+    assert.ok(parity.legacyFallbackFields.includes("profile_sections"));
+  });
+
+  it("reports plain exact (no legacy fallback) when the request needed no unsupported fields", () => {
+    const legacyCards = [card({ university_id: "u-1", university_name: "A" })];
+    const targetedCards = legacyCards.map((c) => ({ ...c }));
+    const targeted = targetedResult({ universityIds: ["u-1"] });
+    const parity = computeShadowParity({
+      requestId: "r7", intent: "housing", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 10, targetedQueryMs: 8,
+    });
+    assert.equal(parity.parityStatus, "exact");
+    // profile_sections is still logged (always borrowed), just doesn't
+    // change the status since it isn't a field this request explicitly asked
+    // for.
+    assert.deepEqual(parity.legacyFallbackFields, ["profile_sections"]);
+  });
 });
