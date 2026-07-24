@@ -12,7 +12,7 @@ import {
   resolveCandidateUniversityIds,
 } from "../../lib/chat/targeted-query";
 import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
-import { attemptTargetedFastPath } from "../../lib/chat/targeted-primary";
+import { attemptTargetedFastPath, type TargetedPrimaryDeps } from "../../lib/chat/targeted-primary";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -126,6 +126,38 @@ const INTENT_TO_REQUESTED_FIELD: Partial<Record<Intent, string>> = {
 };
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
+
+// Phase 3B step 3 requirement: reproduce targeted_error/empty_result/
+// validation_failed WITHOUT mutating real catalog/database rows, via
+// dependency injection rather than corrupting live data. Double-gated so
+// this can never activate in production: (1) the call site below only
+// reads the injection header at all when CHAT_TEST_FAULT_INJECTION=true is
+// explicitly set (a dedicated, purpose-named var, deliberately NOT reusing
+// NODE_ENV -- `next dev`/`next build`/`next start` force NODE_ENV to
+// "development"/"production" themselves regardless of what's passed on the
+// command line, so gating on NODE_ENV === "test" could never actually be
+// exercised against a real running server; this var must never be added to
+// Vercel's production environment variables), and (2) even then, an
+// explicit x-test-inject-targeted-fault header must be present -- a real
+// user request (browser or otherwise) never sends this header, and even if
+// it somehow did, the env var check alone already makes this dead code
+// outside a deliberate test invocation.
+function buildTestFaultInjectionDeps(reason: string): TargetedPrimaryDeps {
+  if (reason === "targeted_error") {
+    return {
+      resolveCandidateUniversityIds: async () => {
+        throw new Error("test-injected-targeted-error");
+      },
+    };
+  }
+  if (reason === "empty_result") {
+    return { selectCards: () => [] };
+  }
+  if (reason === "validation_failed") {
+    return { getUniversity: async () => undefined };
+  }
+  return {};
+}
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
@@ -513,7 +545,11 @@ async function handleChatRequest(request: Request) {
     const intent = constraints.intent;
     console.info("[chat-v2] planner-plan", {
       requestId,
-      sessionId,
+      // Never the raw sessionId (a client-generated identifier that can
+      // correlate a real user's requests across turns/logs) -- only whether
+      // one was sent at all, same signal targeted-primary's own
+      // sessionKeyPresent field uses.
+      sessionKeyPresent: sessionId !== "unknown",
       mode: plannerMode,
       usedSolar: planner.usedSolar,
       issues: planner.issues,
@@ -573,6 +609,13 @@ async function handleChatRequest(request: Request) {
     // (always Legacy), never a fallback to Math.random()-equivalent
     // per-request rolling.
     const canaryKey = sessionId !== "unknown" ? sessionId : null;
+    // Test-only fault injection (Phase 3B step 3 requirement) -- see
+    // buildTestFaultInjectionDeps' own comment. CHAT_TEST_FAULT_INJECTION is
+    // never set in production, so testFaultReason is always null and deps
+    // is never passed outside a deliberate test invocation of this route.
+    const testFaultReason = process.env.CHAT_TEST_FAULT_INJECTION === "true"
+      ? request.headers.get("x-test-inject-targeted-fault")
+      : null;
     const fastPath = await attemptTargetedFastPath({
       enabled: TARGETED_PRIMARY_ENABLED,
       canaryRate: TARGETED_PRIMARY_CANARY_RATE,
@@ -585,6 +628,7 @@ async function handleChatRequest(request: Request) {
       question,
       constraints,
       catalog,
+      ...(testFaultReason ? { deps: buildTestFaultInjectionDeps(testFaultReason) } : {}),
     });
     const legacyLoadSkipped = fastPath.selectedPath === "targeted_primary";
     // Deliberately excludes the raw question text, fact bundle content, and

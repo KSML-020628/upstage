@@ -1,12 +1,29 @@
 import type { PlannerRun } from "./query-plan.ts";
 import type { Intent, QueryConstraints, ResultCard } from "./types.ts";
 import type { UniversityCatalogItem } from "./university-catalog.ts";
+import type { University } from "../types";
 import { groundPlannerFields } from "./planner-grounding.ts";
 import {
   hydrateUniversitiesFromCatalog,
   queryRelevantUniversityFacts,
   resolveCandidateUniversityIds,
 } from "./targeted-query.ts";
+
+// Test-only dependency injection (Phase 3B step 3 requirement: reproduce
+// targeted_error/empty_result/validation_failed without mutating real
+// catalog/database data). Every field is optional and defaults to the real
+// implementation below -- route.ts's real, production call site NEVER
+// passes this object, so this can only ever change behavior when a test
+// file explicitly constructs and passes one. Not gated by an env var here
+// on purpose: the safety boundary lives at the ONE call site (route.ts),
+// which additionally gates it behind NODE_ENV === "test" before it will
+// ever forward a caller-supplied override into this function.
+export type TargetedPrimaryDeps = {
+  resolveCandidateUniversityIds?: typeof resolveCandidateUniversityIds;
+  queryRelevantUniversityFacts?: typeof queryRelevantUniversityFacts;
+  getUniversity?: (id: string) => Promise<University | undefined>;
+  selectCards?: (universities: University[], constraints: QueryConstraints, question: string) => ResultCard[];
+};
 
 // Phase 3B step 2 scope: unchanged from step 1 -- single-university lookups
 // only. Recommendation-style queries (no named university, condition-based,
@@ -156,6 +173,7 @@ export async function attemptTargetedFastPath(args: {
   question: string;
   constraints: QueryConstraints;
   catalog: UniversityCatalogItem[];
+  deps?: TargetedPrimaryDeps;
 }): Promise<TargetedPrimaryResult> {
   if (!args.enabled) return notAttempted("flag_disabled");
   if (!TARGETED_PRIMARY_ALLOWED_INTENTS.has(args.intent)) return notAttempted("intent_not_eligible");
@@ -184,7 +202,10 @@ export async function attemptTargetedFastPath(args: {
       ...(grounded.requestedFields.value.length ? grounded.requestedFields.value : args.constraints.requestedFields),
     ])];
 
-    const { ids: candidateIds, source: candidateSource } = await resolveCandidateUniversityIds({
+    const resolveCandidateUniversityIdsFn = args.deps?.resolveCandidateUniversityIds ?? resolveCandidateUniversityIds;
+    const queryRelevantUniversityFactsFn = args.deps?.queryRelevantUniversityFacts ?? queryRelevantUniversityFacts;
+
+    const { ids: candidateIds, source: candidateSource } = await resolveCandidateUniversityIdsFn({
       plan: args.planner.validatedPlan,
       catalog: args.catalog,
       providedUniversityIds: [targetId],
@@ -202,7 +223,7 @@ export async function attemptTargetedFastPath(args: {
       return fellBack("validation_failed", Date.now() - attemptStart);
     }
 
-    const targeted = await queryRelevantUniversityFacts(candidateIds, groundedRequestedFields, candidateSource);
+    const targeted = await queryRelevantUniversityFactsFn(candidateIds, groundedRequestedFields, candidateSource);
     if (targeted.errors.length) return fellBack("targeted_error", Date.now() - attemptStart);
     // Unsupported fields (course_restrictions/source_links -- no dedicated
     // fact table) fall all the way back to legacy instead of shipping a
@@ -217,8 +238,8 @@ export async function attemptTargetedFastPath(args: {
     // so no separate fetchLegacyFallbackFields call is needed here; that
     // would just be a second, duplicate scoped fetch for data this one
     // call already provides.
-    const { getUniversity } = await import("../supabase.ts");
-    const identity = await getUniversity(targetId);
+    const getUniversityFn = args.deps?.getUniversity ?? (await import("../supabase.ts")).getUniversity;
+    const identity = await getUniversityFn(targetId);
     if (!identity) return fellBack("validation_failed", Date.now() - attemptStart);
 
     const candidateCatalogItems = args.catalog.filter((item) => item.universityId === targetId);
@@ -229,8 +250,8 @@ export async function attemptTargetedFastPath(args: {
     // which pulls in next/server -- fine under Next's own bundler, but it
     // breaks a plain `node --test` run of this module's eligibility-gate
     // tests (which never reach this line) if imported at module top level.
-    const { selectCards } = await import("./selection.ts");
-    const targetedCards = selectCards(targetedUniversities, args.constraints, args.question);
+    const selectCardsFn = args.deps?.selectCards ?? (await import("./selection.ts")).selectCards;
+    const targetedCards = selectCardsFn(targetedUniversities, args.constraints, args.question);
 
     if (!targetedCards.length) return fellBack("empty_result", Date.now() - attemptStart);
 

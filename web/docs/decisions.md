@@ -827,3 +827,97 @@ production env vars left untouched (`vercelProductionEnvStatus:
 only local `.env.local`-driven dev servers were used to simulate each
 config), no merge to main, no recommendation/comparison/follow-up
 expansion of the Targeted path, no removal of the Legacy path.
+
+### Follow-up review found the "68 tests" report was a reporting artifact, plus two real gaps
+
+**1. The step-3 completion report said 43+25=68 tests, but `npm test`
+actually runs 174 across 9 sub-scripts covering all 14 `tests/*.test.ts`
+files.** The 68 figure was never a real gap in test coverage -- it came
+from only reading the tail of a truncated terminal capture (the earlier
+`test:presenter`/`test:chat`/`test:reasoner`/`test:queryplan`/`test:scope`/
+`test:searchconditions`/`test:aliases` sub-runs had already scrolled past
+the visible window). Re-run and tallied every sub-script's own summary
+line individually: 38+14+18+11+17+3+5+43+25 = 174 tests across 44 suites,
+all passing -- confirmed against a baseline of 166 (the count before this
+step's own 8 new distribution/gate tests were added to
+`targeted-primary.test.ts`). Nothing is missing from the `npm test` chain;
+every file in `tests/*.test.ts` is invoked by exactly one of the 9
+sub-scripts.
+
+**2. `targeted_error`/`empty_result`/`validation_failed` needed to be
+reproduced for real, not just reasoned about from code.** Added a
+dependency-injection seam (`TargetedPrimaryDeps` in `targeted-primary.ts`)
+-- `resolveCandidateUniversityIds`/`queryRelevantUniversityFacts`/
+`getUniversity`/`selectCards` can each be overridden per-call, defaulting
+to the real implementations. route.ts's real, production call site never
+passes overrides. A test-only header (`x-test-inject-targeted-fault`) is
+only ever read when a dedicated env var, `CHAT_TEST_FAULT_INJECTION=true`,
+is explicitly set -- **this var must never be added to Vercel's production
+environment variables.** Deliberately not gated on `NODE_ENV === "test"`:
+`next dev`/`next build`/`next start` force `NODE_ENV` to
+`"development"`/`"production"` themselves regardless of what's passed on
+the command line, so that gate could never actually be exercised against a
+real running server. (A prior attempt to test this by importing route.ts
+directly under plain `node --test` also failed outright --
+`next/server`'s bare-specifier import can't be resolved by Node's strict
+ESM loader outside Next's own bundler, the same constraint already
+documented for `selection.ts`'s lazy import in `targeted-primary.ts` --
+so this had to be verified live against a running dev server, the same
+way as every other check in this document, not as a `node --test` unit
+test.)
+
+Live-verified via real HTTP requests against a dev server started with
+`CHAT_TARGETED_PRIMARY_ENABLED=true`, `RATE=1`, `CHAT_TEST_FAULT_INJECTION=true`:
+all three injected faults produced HTTP 200 with a real, non-empty Legacy
+answer and cards, `targetedAttempted: true`, `targetedSucceeded: false`,
+`legacyLoadTriggered: true`, `legacyLoadSkipped: false`, the exact expected
+`fallbackReason` (`targeted_error:test-injected-targeted-error`,
+`empty_result`, `validation_failed`), and `plannerCallCount: 1` (never
+re-invoked). A control request with no injected fault still succeeded via
+`targeted_primary` on the same server, confirming the harness itself is
+valid rather than one that always falls back. Separately restarted the
+server WITHOUT `CHAT_TEST_FAULT_INJECTION` set (otherwise identical) and
+confirmed the same header is completely ignored -- the request still goes
+through `targeted_primary` normally, proving the injection path is truly
+inert by default.
+
+**3. The pre-existing `[chat-v2] planner-plan` log wrote the raw client-sent
+`sessionId`, not just its presence.** Found while checking the frontend
+sessionId investigation's "로그에는 sessionId 원문을 남기지 않는가"
+requirement -- this log line predates Phase 3B entirely but had never been
+audited against that specific bar. Fixed: replaced the raw `sessionId`
+field with `sessionKeyPresent: sessionId !== "unknown"`, the same boolean
+signal `[chat-v2] targeted-primary` already uses. Verified live: sending
+requests shaped exactly like `ChatbotWidget.tsx`'s real `fetch` call
+(`Accept: application/x-ndjson`, same body fields) with real UUIDs, then
+grepping the full server log for those literal UUID strings, found zero
+matches in either log line.
+
+**Frontend `ChatbotWidget.tsx` sessionId behavior** (`app/ui/ChatbotWidget.tsx`):
+`sessionId` is `useState(() => crypto.randomUUID())` -- generated once per
+component mount, held only in React state (no `localStorage`/
+`sessionStorage`/cookie persistence anywhere in the file), and included in
+every `send()` call's request body. The same value is reused for every
+message within one mounted conversation (confirmed live: two sequential
+widget-shaped requests with the same generated UUID both logged
+`sessionKeyPresent: true` under the same conversation). The "새 대화" button
+calls `resetChat()`, which calls `setSessionId(crypto.randomUUID())` --
+a genuinely new, independent id. A full page reload also produces a new
+sessionId (no persistence mechanism survives a reload), but this exactly
+matches the existing behavior for the visible conversation itself (`messages`
+state resets to the welcome screen on reload too) -- reload already meant
+"start over" before this step, and sessionId regeneration is consistent
+with that, not a new inconsistency introduced by canary work. Because the
+real widget always sends a real UUID, `no_stable_canary_key` is not expected
+to fire for genuine end-user traffic through the actual UI; it is the
+correct, intended behavior only for non-UI callers that omit `sessionId`
+entirely (`qa-runner.mjs`, curl, etc.).
+
+**Full re-verification after these fixes**: `npm run build` (success),
+`npm run lint` (0 errors, 1 pre-existing unrelated warning), `npm test`
+(174/174, all 9 sub-scripts), `node qa-runner.mjs` against a default-env
+dev server (32/32, unchanged), a live Targeted-flag-ON integration run
+(`ENABLED=true, RATE=1`) against all 9 canonical queries (identical results
+to the earlier config E run, including the corrected follow-up case
+showing `followup_not_eligible`), and the widget-shaped sessionId
+simulation above.
