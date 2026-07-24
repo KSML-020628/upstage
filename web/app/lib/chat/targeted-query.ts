@@ -13,6 +13,7 @@ import {
   supabaseServerRequest,
 } from "./supabase-facts.ts";
 import { factMap, profileFromFacts, sectionsFromFacts, sourceLinks, type CanonicalFactRow } from "../supabase.ts";
+import { cleanText } from "./utils.ts";
 
 export type UniversityFactBundle = {
   universityId: string;
@@ -95,11 +96,28 @@ export function tablesForRequestedFields(requestedFields: string[]): { tables: s
   return { tables, unsupported };
 }
 
-function filterCatalogByRegionCountry(plan: QueryPlan, catalog: UniversityCatalogItem[]): UniversityCatalogItem[] {
-  const regions = new Set((plan.hardFilters.regions ?? []).map((r) => r.toLowerCase()));
-  const excludedRegions = new Set((plan.hardFilters.excludedRegions ?? []).map((r) => r.toLowerCase()));
-  const countries = new Set((plan.hardFilters.countries ?? []).map((c) => c.toLowerCase()));
-  const excludedCountries = new Set((plan.hardFilters.excludedCountries ?? []).map((c) => c.toLowerCase()));
+export type RegionCountryFilter = {
+  regions: string[];
+  excludedRegions: string[];
+  countries: string[];
+  excludedCountries: string[];
+};
+
+// Exported for targeted-recommendation.ts's complex-condition candidate
+// resolution (Phase 3B step 4): region/country are always-known catalog
+// facts (never an "unknown" state a university can be in), so filtering by
+// them can never accidentally drop a university evaluateUniversity would
+// have called "partial" -- unlike housing/language/deadline conditions,
+// which need the recall-preserving candidateIdsFrom* treatment below. Takes
+// the raw filter fields directly (not a full QueryPlan) so both a Planner
+// plan's hardFilters AND a QueryConstraints object's region/country fields
+// (a different shape -- booleans + arrays, not a single regions array) can
+// each build one of these and share this same filter.
+export function filterCatalogByRegionCountry(filters: RegionCountryFilter, catalog: UniversityCatalogItem[]): UniversityCatalogItem[] {
+  const regions = new Set(filters.regions.map((r) => r.toLowerCase()));
+  const excludedRegions = new Set(filters.excludedRegions.map((r) => r.toLowerCase()));
+  const countries = new Set(filters.countries.map((c) => c.toLowerCase()));
+  const excludedCountries = new Set(filters.excludedCountries.map((c) => c.toLowerCase()));
   return catalog.filter((item) => {
     if (regions.size && !(item.region && regions.has(item.region))) return false;
     if (excludedRegions.size && item.region && excludedRegions.has(item.region)) return false;
@@ -194,7 +212,12 @@ export async function resolveCandidateUniversityIds(args: {
   // search: (1) catalog region/country filter (no query, uses the
   // already-loaded thin catalog), (2) intersect with any fact-table
   // candidate search that has a safe, recall-preserving SQL filter.
-  const regionFiltered = filterCatalogByRegionCountry(args.plan, args.catalog).map((item) => item.universityId);
+  const regionFiltered = filterCatalogByRegionCountry({
+    regions: args.plan.hardFilters.regions ?? [],
+    excludedRegions: args.plan.hardFilters.excludedRegions ?? [],
+    countries: args.plan.hardFilters.countries ?? [],
+    excludedCountries: args.plan.hardFilters.excludedCountries ?? [],
+  }, args.catalog).map((item) => item.universityId);
   const factCandidateResults = await Promise.all([
     candidateIdsFromHousing({ housingGuaranteed: args.groundedHousingGuaranteed, housingAvailable: args.groundedHousingAvailable }),
     candidateIdsFromLanguage(args.groundedLanguageTest),
@@ -259,6 +282,17 @@ export async function queryRelevantUniversityFacts(
 export type LegacyFallbackData = {
   profileSections: ProfileSection[];
   sourceLinksData: Record<string, unknown>[];
+  // Added for Phase 3B step 4 (complex-recommendation candidate pools):
+  // satisfiesMajor (filters.ts) reads university.summary and
+  // exchange_programs[0].course_registration_notes as its keyword-match
+  // corpus. A single-university lookup (Phase 3B step 2) always has these
+  // via a scoped getUniversity() call, but a multi-candidate recommendation
+  // pool never calls getUniversity() per candidate (that would be N
+  // separate queries) -- these two fields are derived from the exact same
+  // canonical_facts rows this function already fetches in one batched
+  // query, so no extra round trip is needed to also return them.
+  summary?: string;
+  courseRegistrationNotes?: string;
 };
 
 // Phase 3A.2: profile_sections and source_links have no dedicated fact
@@ -310,6 +344,13 @@ export async function fetchLegacyFallbackFields(universityIds: string[]): Promis
     result.set(id, {
       profileSections: sectionsFromFacts(profile, mapped),
       sourceLinksData: sourceLinks(profile, mapped),
+      // Same derivation supabase.ts's hydrateUniversity() uses for these two
+      // fields (minus its own static-fallback-dataset lookup, which only
+      // matters when Supabase itself is unreachable -- not relevant here,
+      // since reaching this line already means the canonical_facts query
+      // above succeeded).
+      summary: cleanText(profile?.summary, cleanText(mapped.get("summary")?.value_text, "")) || undefined,
+      courseRegistrationNotes: cleanText(profile?.course_registration_notes, mapped.get("section_11_summary")?.value_text ?? "") || undefined,
     });
   }
   return { data: result, rowCount: rows.length, queryCount };
@@ -350,7 +391,7 @@ export function hydrateUniversitiesFromCatalog(
       university_name: item.universityName,
       country: item.country ?? legacy?.country ?? "",
       city: legacy?.city ?? "",
-      summary: legacy?.summary ?? "",
+      summary: fallback?.summary ?? legacy?.summary ?? "",
       latitude: legacy?.latitude ?? 0,
       longitude: legacy?.longitude ?? 0,
       profile_sections: fallback?.profileSections ?? legacy?.profile_sections ?? [],
@@ -359,6 +400,7 @@ export function hydrateUniversitiesFromCatalog(
         university_id: item.universityId,
         academic_year: legacyProgram?.academic_year ?? "",
         program_name: legacyProgram?.program_name ?? "",
+        course_registration_notes: fallback?.courseRegistrationNotes ?? legacyProgram?.course_registration_notes ?? "",
         language_requirements: bundle?.facts.language_requirements ?? [],
         housing_options: bundle?.facts.housing_options ?? [],
         application_deadlines: bundle?.facts.application_deadlines ?? [],

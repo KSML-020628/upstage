@@ -11,8 +11,16 @@ import {
   queryRelevantUniversityFacts,
   resolveCandidateUniversityIds,
 } from "../../lib/chat/targeted-query";
-import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
+import { computeShadowParity, computeComplexRecall, logShadowParity, logComplexRecallParity } from "../../lib/chat/shadow-parity";
+import { evaluateUniversity } from "../../lib/chat/filters";
 import { attemptTargetedFastPath } from "../../lib/chat/targeted-primary";
+import {
+  attemptTargetedRecommendation,
+  hasComplexRecommendationConditions,
+  hasUnsupportedRecommendationConditions,
+  resolveComplexCandidateIds,
+  type TargetedRecommendationDeps,
+} from "../../lib/chat/targeted-recommendation";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -110,6 +118,26 @@ const SHADOW_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGE
 const TARGETED_PRIMARY_ENABLED = process.env.CHAT_TARGETED_PRIMARY_ENABLED === "true";
 const TARGETED_PRIMARY_CANARY_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_PRIMARY_CANARY_RATE) || 0));
 
+// Phase 3B step 4: a SEPARATE pair of flags for compound-condition
+// recommendation queries (region/country/language/deadline/housing/major
+// combinations), independent of the single-university canary above -- a
+// problem in one must be revertible without touching the other, per the
+// instruction ("복합 추천에 문제가 생겼을 때 추천 경로만 즉시 Legacy로
+// 되돌릴 수 있어야 합니다"). Same fail-closed parsing, same doubly-safe
+// default (both must be set for any real traffic to be routed here).
+const TARGETED_RECOMMENDATION_ENABLED = process.env.CHAT_TARGETED_RECOMMENDATION_ENABLED === "true";
+const TARGETED_RECOMMENDATION_CANARY_RATE = Math.min(1, Math.max(0, Number(process.env.CHAT_TARGETED_RECOMMENDATION_CANARY_RATE) || 0));
+
+// Test-only fault injection for both Targeted fast paths (Phase 3B step 3's
+// mechanism, reused here for the recommendation path too) -- only ever read
+// when this dedicated env var is explicitly "true". MUST NEVER be set in
+// Vercel's production environment variables. Deliberately not gated on
+// NODE_ENV === "test": `next dev`/`next build`/`next start` force NODE_ENV
+// to "development"/"production" themselves regardless of what's passed on
+// the command line, so that gate could never be exercised against a real
+// running server.
+const TEST_FAULT_INJECTION_ALLOWED = process.env.CHAT_TEST_FAULT_INJECTION === "true";
+
 // Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
 // shadow query needs to know which fact table the PRIMARY intent alone
 // implies, since cards.ts's own requestedFactBundle() always fetches that
@@ -126,6 +154,45 @@ const INTENT_TO_REQUESTED_FIELD: Partial<Record<Intent, string>> = {
 };
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
+
+// Phase 3B step 4 requirement: reproduce targeted_error/empty_candidate_pool/
+// validation_failed for the complex-recommendation path WITHOUT mutating
+// any real catalog/database row, via dependency injection -- see
+// TARGETED_RECOMMENDATION's own gate above (TEST_FAULT_INJECTION_ALLOWED)
+// for why this can never activate in production. This function itself is
+// inert unless called, and it is only ever called when that gate already
+// passed.
+function buildRecommendationFaultInjectionDeps(reason: string): TargetedRecommendationDeps {
+  if (reason === "targeted_error") {
+    return {
+      queryRelevantUniversityFacts: async () => {
+        throw new Error("test-injected-targeted-error");
+      },
+    };
+  }
+  if (reason === "empty_candidate_pool") {
+    return { resolveComplexCandidateIds: () => [] };
+  }
+  if (reason === "validation_failed") {
+    // A card whose university_id is NOT in the resolved candidate set --
+    // exercises attemptTargetedRecommendation's own self-consistency check
+    // (the same class of bug the Phase 3A.1 shadow re-test caught once
+    // already: candidate resolution silently substituting unrelated
+    // universities into the hydrated set) without needing a real evaluator
+    // bug to occur.
+    const invalidCard = {
+      university_id: "test-injected-invalid-id",
+      university_name: "Test Injected University",
+      country: "", city: "", summary: "", badges: [], highlights: [],
+      action_label: "", action_url: "",
+    };
+    return {
+      selectCards: () => [invalidCard],
+      selectClassifiedCards: () => ({ matched: [invalidCard], partiallyMatched: [], excluded: [] }),
+    };
+  }
+  return {};
+}
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
@@ -394,6 +461,11 @@ async function buildFinalResponse(args: {
 }
 
 async function handleChatRequest(request: Request) {
+  // Captured before any other work so the new [chat-v2] targeted-recommendation
+  // log's totalResponseMs (Phase 3B step 4) reflects true wall-clock time
+  // from the top of this request, not just from wherever requestId happens
+  // to be generated further down.
+  const requestStart = Date.now();
   if (isRateLimited(request)) {
     return NextResponse.json({ error: "질문이 너무 빠르게 반복되고 있습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 429 });
   }
@@ -589,14 +661,90 @@ async function handleChatRequest(request: Request) {
       });
     }
 
-    // Legacy fallback (lazy load): reached only when the fast path above
-    // wasn't eligible or fell back (both already logged) -- everything
-    // from here down is the pre-Phase-3B-step-2 flow, unchanged, just
-    // starting from a full load that now only happens when it's actually
-    // needed.
+    // Phase 3B step 4: compound-condition recommendation queries (region/
+    // country/language/deadline/housing/major combinations) -- a SEPARATE
+    // fast path from the single-university one above, gated by its own
+    // independent flag/canary-rate pair. Only attempted when the
+    // single-university path above wasn't eligible at all (fastPath's
+    // selectedPath is "legacy_default" with a structural, non-canary
+    // reason) or fell back -- either way this request still hasn't reached
+    // getChatUniversities() yet.
+    const recommendationCanaryKey = canaryKey !== null ? `rec:${canaryKey}` : null;
+    const testFaultReason = TEST_FAULT_INJECTION_ALLOWED
+      ? request.headers.get("x-test-inject-recommendation-fault")
+      : null;
+    const recommendation = await attemptTargetedRecommendation({
+      enabled: TARGETED_RECOMMENDATION_ENABLED,
+      canaryRate: TARGETED_RECOMMENDATION_CANARY_RATE,
+      canaryKey: recommendationCanaryKey,
+      intent,
+      catalogExactTargetIds,
+      hasFollowupContext,
+      planner,
+      finalInScope,
+      question,
+      constraints,
+      catalog,
+      ...(testFaultReason ? { deps: buildRecommendationFaultInjectionDeps(testFaultReason) } : {}),
+    });
+    const recommendationLegacyLoadSkipped = recommendation.selectedPath === "targeted_recommendation";
+    // Deliberately excludes the raw question text, sessionId, and any
+    // user-supplied or fact-table content -- every field here is a count, a
+    // boolean, a fixed enum-like reason string, or a duration.
+    console.info("[chat-v2] targeted-recommendation", {
+      requestId,
+      intent,
+      complexRecommendationEligible: recommendation.complexRecommendationEligible,
+      canarySelected: recommendation.canarySelected,
+      candidateCount: recommendation.candidateCount,
+      targetedAttempted: recommendation.targetedAttempted,
+      targetedSucceeded: recommendation.targetedSucceeded,
+      selectedPath: recommendation.selectedPath,
+      legacyLoadTriggered: !recommendationLegacyLoadSkipped,
+      legacyLoadSkipped: recommendationLegacyLoadSkipped,
+      fallbackReason: recommendation.fallbackReason,
+      plannerCallCount,
+      // Always 0 here: this log fires at the fast-path DECISION point,
+      // strictly before the reasoner is ever invoked (that only happens
+      // later, inside v2Response, on whichever cards this request ends up
+      // with -- Targeted or Legacy). The reasoner's own call is already
+      // independently logged and counted by v2Response's existing
+      // reasonerCallCount in [chat-v2] pipeline; this field exists here
+      // only so a dashboard reading this log in isolation doesn't have to
+      // guess it might be non-zero.
+      reasonerCallCount: 0,
+      targetedQueryMs: recommendation.targetedQueryMs,
+      // Always 0 here: legacyQueryMs is only meaningful once
+      // getChatUniversities() actually runs, which -- by construction --
+      // has not happened yet at this log point (that's the entire premise
+      // of a pre-load fast path). See the separate, unconditional
+      // [chat-v2] legacy-load log further down for the real value whenever
+      // this request does fall through to Legacy.
+      legacyQueryMs: 0,
+      totalResponseMs: Date.now() - requestStart,
+    });
+    if (recommendation.selectedPath === "targeted_recommendation" && recommendation.cards) {
+      const cards = recommendation.cards;
+      const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
+      return buildFinalResponse({
+        requestId, question, intent, constraints, cards,
+        classified: recommendation.classified, planner, factTablesDegraded: false, runReasoner,
+      });
+    }
+
+    // Legacy fallback (lazy load): reached only when neither fast path above
+    // was eligible or both fell back (all already logged) -- everything
+    // from here down is the pre-Phase-3B flow, unchanged, just starting
+    // from a full load that now only happens when it's actually needed.
     const legacyQueryStart = Date.now();
     const { universities, factTablesDegraded } = await getChatUniversities();
     const legacyQueryMs = Date.now() - legacyQueryStart;
+    // Logged unconditionally (not just when the shadow block's own
+    // logShadowParity call happens to fire) so legacyQueryMs is always
+    // observable and correlatable with the earlier [chat-v2]
+    // targeted-primary/targeted-recommendation logs via requestId, letting
+    // a dashboard compute "Legacy 로딩 생략률" without shadow mode enabled.
+    console.info("[chat-v2] legacy-load", { requestId, legacyQueryMs, factTablesDegraded });
     if (factTablesDegraded) {
       console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
     }
@@ -855,6 +1003,47 @@ async function handleChatRequest(request: Request) {
           legacyTotalFactRows: countTotalFactRows(universities),
           targetedQueryMs,
         }));
+
+        // Phase 3B step 4 requirement [5]: candidate-recall shadow
+        // measurement for the complex-recommendation path specifically,
+        // independent of whether TARGETED_RECOMMENDATION_ENABLED is
+        // actually on in this environment -- this must be observable BEFORE
+        // ever raising the real canary rate above 0, not just after. Only
+        // computed when this request is structurally the kind of query the
+        // complex-recommendation path would attempt (no resolved
+        // single/multi target, no follow-up, none of the unsupported
+        // conditions) -- for anything else there is no meaningful
+        // "candidate recall" to measure.
+        if (!exactTargets.length && !followupTargets.length
+          && hasComplexRecommendationConditions(constraints)
+          && !hasUnsupportedRecommendationConditions(constraints)) {
+          try {
+            const legacyEligibleUniversityIds = universities
+              .filter((university) => evaluateUniversity(university, constraints).status !== "excluded")
+              .map((university) => university.id);
+            const targetedCandidateUniversityIds = resolveComplexCandidateIds(constraints, catalog);
+            // Forced enabled/rate/canaryKey so this shadow measurement
+            // always attempts the real path's own logic regardless of the
+            // real production flags above -- reusing the exact same
+            // function the real canary would call (not a separate
+            // reimplementation prone to drifting out of sync).
+            const shadowRecommendation = await attemptTargetedRecommendation({
+              enabled: true, canaryRate: 1, canaryKey: "shadow-recall-check",
+              intent, catalogExactTargetIds, hasFollowupContext, planner, finalInScope,
+              question, constraints, catalog,
+            });
+            logComplexRecallParity(computeComplexRecall({
+              requestId,
+              intent,
+              legacyEligibleUniversityIds,
+              targetedCandidateUniversityIds,
+              finalLegacyCards: cards,
+              finalTargetedCards: shadowRecommendation.cards ?? [],
+            }));
+          } catch (complexRecallError) {
+            console.error("[chat-v2] complex-recall-shadow failed", complexRecallError);
+          }
+        }
       } catch (shadowError) {
         // The comparison/logging step itself must be just as inert as the
         // query it's comparing -- a bug here must never turn into a 500 for

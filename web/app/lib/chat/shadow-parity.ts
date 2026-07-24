@@ -225,3 +225,69 @@ export function computeShadowParity(args: {
 export function logShadowParity(parity: ShadowParityLog) {
   console.info("[chat-v2] targeted-query-shadow", parity);
 }
+
+// Phase 3B step 4 requirement [5]: candidate-recall parity specifically for
+// the complex-recommendation path. This is a DIFFERENT question from
+// ShadowParityLog's own card-level comparison above -- it asks "did
+// candidate resolution keep every university Legacy's own evaluator would
+// have shown (matched OR partial), before hydration/ranking ever ran?" --
+// which is the recall guarantee resolveComplexCandidateIds is supposed to
+// provide by construction (region/country-only narrowing, never excluding
+// on an unknown-capable condition). candidateRecall < 1 means that
+// guarantee was violated for this request and the complex-recommendation
+// canary must not be trusted at its current rate.
+export type ComplexRecallLog = {
+  requestId: string;
+  intent: string;
+  legacyEligibleUniversityIds: string[];
+  targetedCandidateUniversityIds: string[];
+  missingFromTargetedCandidates: string[];
+  extraTargetedCandidates: string[];
+  candidateRecall: number;
+  finalLegacyUniversityIds: string[];
+  finalTargetedUniversityIds: string[];
+  orderMatches: boolean;
+  conditionStateParity: "exact" | "partial_mismatch" | "not_applicable";
+};
+
+export function computeComplexRecall(args: {
+  requestId: string;
+  intent: string;
+  legacyEligibleUniversityIds: string[];
+  targetedCandidateUniversityIds: string[];
+  finalLegacyCards: ResultCard[];
+  finalTargetedCards: ResultCard[];
+}): ComplexRecallLog {
+  const legacySet = new Set(args.legacyEligibleUniversityIds);
+  const candidateSet = new Set(args.targetedCandidateUniversityIds);
+  const missingFromTargetedCandidates = args.legacyEligibleUniversityIds.filter((id) => !candidateSet.has(id));
+  const extraTargetedCandidates = args.targetedCandidateUniversityIds.filter((id) => !legacySet.has(id));
+  const candidateRecall = args.legacyEligibleUniversityIds.length
+    ? (args.legacyEligibleUniversityIds.length - missingFromTargetedCandidates.length) / args.legacyEligibleUniversityIds.length
+    : 1;
+
+  const finalLegacyUniversityIds = args.finalLegacyCards.map(cardKey);
+  const finalTargetedUniversityIds = args.finalTargetedCards.map(cardKey);
+  const orderMatches = finalLegacyUniversityIds.length === finalTargetedUniversityIds.length
+    && finalLegacyUniversityIds.every((id, index) => id === finalTargetedUniversityIds[index]);
+  const targetedById = new Map(args.finalTargetedCards.map((card) => [cardKey(card), card]));
+  const conditionStateParity = compareField(args.finalLegacyCards, targetedById, conditionSignature, (a, b) => a === b);
+
+  return {
+    requestId: args.requestId,
+    intent: args.intent,
+    legacyEligibleUniversityIds: args.legacyEligibleUniversityIds,
+    targetedCandidateUniversityIds: args.targetedCandidateUniversityIds,
+    missingFromTargetedCandidates,
+    extraTargetedCandidates,
+    candidateRecall,
+    finalLegacyUniversityIds,
+    finalTargetedUniversityIds,
+    orderMatches,
+    conditionStateParity,
+  };
+}
+
+export function logComplexRecallParity(parity: ComplexRecallLog) {
+  console.info("[chat-v2] complex-recall-shadow", parity);
+}
