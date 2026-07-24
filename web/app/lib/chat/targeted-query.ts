@@ -322,11 +322,17 @@ export async function fetchLegacyFallbackFields(universityIds: string[]): Promis
 // targeted-only evaluator or ranker is implemented anywhere.
 // city/summary/academic_year/program_name are still borrowed from the
 // legacy University when available (cheap, non-scoring identity fields,
-// not the class of "legacy fallback" this phase scoped down) -- but
-// profile_sections/source_links/course_restrictions now come from
-// legacyFallback (fetchLegacyFallbackFields' scoped, per-candidate query),
-// not from the full legacyById map, so hydration no longer structurally
-// requires a full legacy load for the fields that actually affect scoring.
+// not the class of "legacy fallback" this phase scoped down).
+// profile_sections/source_links prefer legacyFallback (fetchLegacyFallbackFields'
+// scoped, per-candidate canonical_facts query, used by the shadow path and
+// Phase 3B step 1, which run alongside a full legacy load anyway) but fall
+// back to legacyById's own University object when legacyFallback has no
+// entry -- Phase 3B step 2's fast path passes a single-entry legacyById
+// (from a scoped getUniversity(id) call, not a full load) and an EMPTY
+// legacyFallback, since getUniversity() already derives profile_sections/
+// source_links from its own canonical_facts fetch; requiring a second,
+// duplicate scoped fetch just to populate legacyFallback would defeat the
+// purpose of skipping the full load in the first place.
 export function hydrateUniversitiesFromCatalog(
   catalogItems: UniversityCatalogItem[],
   factBundles: UniversityFactBundle[],
@@ -347,7 +353,7 @@ export function hydrateUniversitiesFromCatalog(
       summary: legacy?.summary ?? "",
       latitude: legacy?.latitude ?? 0,
       longitude: legacy?.longitude ?? 0,
-      profile_sections: fallback?.profileSections ?? [],
+      profile_sections: fallback?.profileSections ?? legacy?.profile_sections ?? [],
       exchange_programs: [{
         id: legacyProgram?.id ?? `${item.universityId}-targeted`,
         university_id: item.universityId,
@@ -359,7 +365,7 @@ export function hydrateUniversitiesFromCatalog(
         estimated_costs: bundle?.facts.estimated_costs ?? [],
         quota_facts: bundle?.facts.quota_facts ?? [],
         course_restrictions: [],
-        source_links: fallback?.sourceLinksData ?? [],
+        source_links: fallback?.sourceLinksData ?? legacyProgram?.source_links ?? [],
       }],
     };
   });

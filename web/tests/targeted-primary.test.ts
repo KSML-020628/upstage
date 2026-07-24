@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveTargetedPrimary, TARGETED_PRIMARY_ALLOWED_INTENTS } from "../app/lib/chat/targeted-primary.ts";
+import {
+  attemptTargetedFastPath,
+  canaryRollFor,
+  stableCanaryBucket,
+  TARGETED_PRIMARY_ALLOWED_INTENTS,
+} from "../app/lib/chat/targeted-primary.ts";
 import type { PlannerRun } from "../app/lib/chat/query-plan.ts";
 import type { QueryPlan } from "../app/lib/chat/query-plan.ts";
 import type { QueryConstraints } from "../app/lib/chat/types.ts";
-import type { University } from "../app/lib/types.ts";
+import type { UniversityCatalogItem } from "../app/lib/chat/university-catalog.ts";
 
 function plan(overrides: Partial<QueryPlan> = {}): QueryPlan {
   return {
@@ -35,26 +40,26 @@ function constraints(overrides: Partial<QueryConstraints> = {}): QueryConstraint
   } as QueryConstraints;
 }
 
-const sheffield: University = {
-  id: "u-sheffield", university_name: "University of Sheffield", country: "United Kingdom", city: "Sheffield",
-  summary: "", latitude: 0, longitude: 0,
-  exchange_programs: [{ id: "p1", university_id: "u-sheffield", academic_year: "2026/27", program_name: "Exchange" }],
-};
+const catalog: UniversityCatalogItem[] = [
+  { universityId: "u-sheffield", universityName: "University of Sheffield", aliases: [], country: "United Kingdom", region: "europe" },
+  { universityId: "u-bristol", universityName: "University of Bristol", aliases: [], country: "United Kingdom", region: "europe" },
+];
 
 const baseArgs = {
   enabled: true,
   canaryRate: 1,
+  canaryKey: "test-request-id",
   intent: "language" as const,
-  exactTargets: [sheffield],
-  followupTargets: [],
+  catalogExactTargetIds: ["u-sheffield"],
+  hasFollowupContext: false,
   planner: plannerRun(plan()),
   finalInScope: true,
   question: "University of Sheffield의 IELTS 조건을 알려줘.",
   constraints: constraints(),
-  legacyById: new Map([["u-sheffield", sheffield]]),
+  catalog,
 };
 
-describe("TARGETED_PRIMARY_ALLOWED_INTENTS: Phase 3B step 1 scope is single-university lookups only", () => {
+describe("TARGETED_PRIMARY_ALLOWED_INTENTS: Phase 3B scope is single-university lookups only", () => {
   it("allows exactly general/language/housing/deadline, holding back cost/quota/restriction/source", () => {
     assert.deepEqual(
       [...TARGETED_PRIMARY_ALLOWED_INTENTS].sort(),
@@ -63,47 +68,91 @@ describe("TARGETED_PRIMARY_ALLOWED_INTENTS: Phase 3B step 1 scope is single-univ
   });
 });
 
-describe("resolveTargetedPrimary: eligibility gate never even attempts the Targeted path outside its scope", () => {
+describe("stableCanaryBucket / canaryRollFor: deterministic, not Math.random()-based", () => {
+  it("returns the same bucket for the same key every time (no Math.random involved)", () => {
+    const a = stableCanaryBucket("session-abc-123");
+    const b = stableCanaryBucket("session-abc-123");
+    assert.equal(a, b);
+  });
+
+  it("returns a bucket in [0, 10000)", () => {
+    const bucket = stableCanaryBucket("some-key");
+    assert.ok(bucket >= 0 && bucket < 10_000);
+  });
+
+  it("canaryRollFor is deterministic for a given key and rate -- same key never flips between calls", () => {
+    const key = "session-xyz-789";
+    const first = canaryRollFor(key, 0.5);
+    for (let i = 0; i < 20; i += 1) {
+      assert.equal(canaryRollFor(key, 0.5), first);
+    }
+  });
+
+  it("rate 0 never selects any key, rate 1 always selects every key", () => {
+    const keys = ["a", "b", "c", "session-1", "session-2", "req-abc"];
+    for (const key of keys) {
+      assert.equal(canaryRollFor(key, 0), false);
+      assert.equal(canaryRollFor(key, 1), true);
+    }
+  });
+
+  it("does not cluster sequential/near-identical keys onto one side (regression: djb2's raw hash put session-1..session-10 all on the same side of a 50% split before a finalizer was added)", () => {
+    let selectedCount = 0;
+    const total = 1000;
+    for (let i = 0; i < total; i += 1) {
+      if (canaryRollFor(`session-${i}`, 0.5)) selectedCount += 1;
+    }
+    // Not asserting an exact 50% -- just that it's a real split, not a
+    // near-100/0 clustering from poor hash avalanche behavior.
+    assert.ok(selectedCount > total * 0.35 && selectedCount < total * 0.65, `expected a roughly even split, got ${selectedCount}/${total}`);
+  });
+
+  it("different keys can land in different buckets (not all collapsed to one value)", () => {
+    const buckets = new Set(["a", "b", "c", "d", "e", "f", "g", "h"].map((key) => stableCanaryBucket(key)));
+    assert.ok(buckets.size > 1);
+  });
+});
+
+describe("attemptTargetedFastPath: eligibility gate never even attempts the Targeted path outside its scope", () => {
   it("does not attempt when the feature flag is disabled (defaults doubly safe)", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, enabled: false });
+    const result = await attemptTargetedFastPath({ ...baseArgs, enabled: false });
     assert.equal(result.selectedPath, "legacy_default");
     assert.equal(result.fallbackReason, "flag_disabled");
     assert.equal(result.cards, null);
   });
 
   it("does not attempt for a held-back intent (e.g. cost recommendation)", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, intent: "cost" });
+    const result = await attemptTargetedFastPath({ ...baseArgs, intent: "cost" });
     assert.equal(result.fallbackReason, "intent_not_eligible");
   });
 
   it("does not attempt when there is follow-up context (held back for a later expansion)", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, followupTargets: [sheffield] });
+    const result = await attemptTargetedFastPath({ ...baseArgs, hasFollowupContext: true });
     assert.equal(result.fallbackReason, "followup_not_eligible");
   });
 
   it("does not attempt for a recommendation query with zero named universities", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, exactTargets: [] });
+    const result = await attemptTargetedFastPath({ ...baseArgs, catalogExactTargetIds: [] });
     assert.equal(result.fallbackReason, "not_single_target");
   });
 
   it("does not attempt for a multi-university comparison (다수 대학 비교 및 랭킹 held back)", async () => {
-    const bristol: University = { ...sheffield, id: "u-bristol", university_name: "University of Bristol" };
-    const result = await resolveTargetedPrimary({ ...baseArgs, exactTargets: [sheffield, bristol] });
+    const result = await attemptTargetedFastPath({ ...baseArgs, catalogExactTargetIds: ["u-sheffield", "u-bristol"] });
     assert.equal(result.fallbackReason, "not_single_target");
   });
 
   it("does not attempt without a validated Planner plan", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, planner: plannerRun(null) });
+    const result = await attemptTargetedFastPath({ ...baseArgs, planner: plannerRun(null) });
     assert.equal(result.fallbackReason, "no_validated_plan");
   });
 
   it("does not attempt when the question is out of scope", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, finalInScope: false });
+    const result = await attemptTargetedFastPath({ ...baseArgs, finalInScope: false });
     assert.equal(result.fallbackReason, "out_of_scope");
   });
 
-  it("does not attempt when the canary rate is 0 (guaranteed miss)", async () => {
-    const result = await resolveTargetedPrimary({ ...baseArgs, canaryRate: 0 });
+  it("does not attempt when the canary rate is 0 (guaranteed miss, deterministically)", async () => {
+    const result = await attemptTargetedFastPath({ ...baseArgs, canaryRate: 0 });
     assert.equal(result.fallbackReason, "canary_miss");
   });
 });

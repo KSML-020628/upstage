@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { University } from "../../lib/types";
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
 import { runSolarPlanner, type PlannerRun } from "../../lib/chat/query-plan";
-import { getUniversityCatalog } from "../../lib/chat/university-catalog";
+import { catalogToKnownUniversityNames, getUniversityCatalog } from "../../lib/chat/university-catalog";
 import { groundPlannerFields } from "../../lib/chat/planner-grounding";
 import {
   countTotalFactRows,
@@ -12,7 +12,7 @@ import {
   resolveCandidateUniversityIds,
 } from "../../lib/chat/targeted-query";
 import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
-import { resolveTargetedPrimary } from "../../lib/chat/targeted-primary";
+import { attemptTargetedFastPath } from "../../lib/chat/targeted-primary";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
 import { findCardsMissingFromAnswer, isPromptInjectionRequest } from "../../lib/chat/chat-policy";
@@ -250,6 +250,143 @@ async function v2Response(args: {
   });
 }
 
+// Phase 3B step 2: this is the SAME response-construction branching that
+// always ran at the end of handleChatRequest, extracted unchanged so BOTH
+// the fast, no-full-load Targeted path and the legacy full-load fallback
+// path can call it -- neither needs the raw universities[] array, only the
+// already-built cards/classified/constraints/intent, so extraction requires
+// no behavior change, just a shared call site instead of one inline block.
+async function buildFinalResponse(args: {
+  requestId: string;
+  question: string;
+  intent: Intent;
+  constraints: QueryConstraints;
+  cards: ResultCard[];
+  classified: ReturnType<typeof selectClassifiedCards> | undefined;
+  planner: PlannerRun;
+  factTablesDegraded: boolean;
+  runReasoner: boolean;
+}) {
+  const { requestId, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner } = args;
+
+  if (!cards.length) {
+    return NextResponse.json({
+      answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
+      cards: [],
+      sources: [],
+      searchMode: "Supabase 구조화 필드 필터링 결과 없음",
+    });
+  }
+
+  if (classified) {
+    const detailedAnswer = constraints.requestedFields.length > 1
+      ? [
+          deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched),
+          deterministicRequestedFieldsAnswer(cards, constraints.requestedFields),
+        ].join("\n\n")
+      : deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
+    // deterministicClassifiedAnswer always names every matched/partial card,
+    // so this should never find anything -- it exists to catch a future
+    // change to that template silently dropping a card's name, which would
+    // otherwise ship unnoticed (chat-policy.ts warns against unused
+    // safeguards; this is the same check kept from becoming one).
+    const missingFromAnswer = findCardsMissingFromAnswer(cards, detailedAnswer);
+    if (missingFromAnswer.length) {
+      console.warn("[chat-v2] card missing from classified answer text", missingFromAnswer.map((card) => card.university_id));
+    }
+    return v2Response({
+      question,
+      cards,
+      detailedAnswer,
+      planner,
+      factTablesDegraded,
+      requestId,
+      runReasoner,
+      extra: {
+        matched: classified.matched,
+        partially_matched: classified.partiallyMatched,
+        excluded_count: classified.excluded.length,
+        searchMode: "Supabase 구조화 조건 판정(충족/부분 확인/미충족)",
+      },
+    });
+  }
+
+  if (intent === "source") {
+    const sources = collectSources(cards);
+    const detailedAnswer = sources.length
+      ? [
+          "### 공식 출처",
+          "",
+          ...sources.map((source) => `- **${source.university_name || "대학"}**: [${source.title}](${source.url})`),
+        ].join("\n")
+      : ["### 공식 출처", "", "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다."].join("\n");
+    const shortAnswer = sources.length
+      ? sources.slice(0, 3).map((source) => `- [${source.university_name || source.title} 공식 출처](${source.url})`).join("\n")
+      : "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다.";
+    // shortAnswerOverride always wins in composeShortAnswer, so the
+    // reasoner's narrative can never surface here -- calling it anyway
+    // would just be a wasted Solar round-trip for a pure source lookup.
+    return v2Response({
+      question,
+      cards,
+      detailedAnswer,
+      shortAnswerOverride: shortAnswer,
+      planner,
+      factTablesDegraded,
+      requestId,
+      runReasoner: false,
+      extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
+    });
+  }
+
+  if (constraints.requestedFields.length > 1) {
+    const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
+    return v2Response({
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
+    });
+  }
+
+  if (intent === "cost") {
+    const detailedAnswer = deterministicDirectCostAnswer(cards);
+    return v2Response({
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
+    });
+  }
+
+  if (intent === "deadline") {
+    const detailedAnswer = deterministicDeadlineAnswer(cards);
+    return v2Response({
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
+    });
+  }
+
+
+  if (intent === "restriction") {
+    const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
+    const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
+    return v2Response({
+      question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
+    });
+  }
+
+  if (intent === "housing" || intent === "language") {
+    const detailedAnswer = deterministicFactAnswer(cards, intent);
+    return v2Response({
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      extra: { searchMode: searchMode(intent) },
+    });
+  }
+  const detailedAnswer = deterministicGeneralAnswer(cards);
+  return v2Response({
+    question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+    extra: { searchMode: searchMode(intent) },
+  });
+}
+
 async function handleChatRequest(request: Request) {
   if (isRateLimited(request)) {
     return NextResponse.json({ error: "질문이 너무 빠르게 반복되고 있습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 429 });
@@ -284,13 +421,7 @@ async function handleChatRequest(request: Request) {
   if (isPromptInjectionRequest(question)) return safePromptInjectionResponse();
 
   try {
-    const legacyQueryStart = Date.now();
-    const { universities, factTablesDegraded } = await getChatUniversities();
-    const legacyQueryMs = Date.now() - legacyQueryStart;
     const requestId = crypto.randomUUID().slice(0, 8);
-    if (factTablesDegraded) {
-      console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
-    }
     if (isCostOfLivingIndexQuestion(question)) return costOfLivingResponse(question);
     // Product policy must win even when the active planner classifies the
     // question as out of scope or changes its intent.
@@ -317,12 +448,17 @@ async function handleChatRequest(request: Request) {
     // word nearby) never got a chance to have the Planner classify it at
     // all, regardless of how well Solar itself would have handled it.
     const isChitchatOnly = isConservativeChitchat(question);
+    // Phase 3B step 2: the Planner call (and every check up through the
+    // fast-path attempt below) uses the lightweight catalog, never the full
+    // legacy load -- getChatUniversities() only runs if this request falls
+    // through to the legacy fallback further down.
+    const catalog = await getUniversityCatalog();
     const planner: PlannerRun = apiKey && !isChitchatOnly && plannerMode === "active"
       ? await runSolarPlanner({
           apiKey,
           model: process.env.UPSTAGE_CHAT_MODEL || "solar-pro3",
           question,
-          knownUniversityNames: universities.map((university) => university.university_name),
+          knownUniversityNames: catalogToKnownUniversityNames(catalog),
           reasoningEffort: resolveReasoningEffort(),
         })
       : {
@@ -342,6 +478,7 @@ async function handleChatRequest(request: Request) {
     const constraints = plannerMode === "active"
       ? { ...applyValidatedPlannerPlan(legacyConstraints, planner.validatedPlan), inScope: finalInScope }
       : legacyConstraints;
+    const intent = constraints.intent;
     console.info("[chat-v2] planner-plan", {
       requestId,
       sessionId,
@@ -371,6 +508,75 @@ async function handleChatRequest(request: Request) {
             ? "regex_false_positive"
             : null,
     });
+
+    // Phase 3B step 2: resolve a single-university target via the catalog
+    // (alias match, then Planner-named match) -- never the legacy regex/
+    // token matcher (findTargetUniversities), which needs full University
+    // objects the catalog doesn't have. If this comes up empty, the fast
+    // path below is simply not eligible; the legacy fallback further down
+    // still runs the regex matcher exactly as it always has.
+    const aliasNames = universityNamesFromAliases(question);
+    const catalogIdByName = new Map(catalog.map((item) => [item.universityName, item.universityId]));
+    const aliasTargetIds = aliasNames.map((name) => catalogIdByName.get(name)).filter((id): id is string => Boolean(id));
+    const plannerCanResolveTargets = planner.validatedPlan
+      && planner.validatedPlan.intent !== "university_recommendation"
+      && planner.validatedPlan.intent !== "out_of_scope";
+    const plannerTargetIds = plannerCanResolveTargets
+      ? planner.validatedPlan!.universityNames.map((name) => catalogIdByName.get(name)).filter((id): id is string => Boolean(id))
+      : [];
+    const catalogExactTargetIds = aliasTargetIds.length ? aliasTargetIds : plannerTargetIds;
+    // Same condition usePreviousResults (further down, in the legacy
+    // fallback) computes -- entirely derivable without any University data,
+    // so follow-up context can rule out the fast path before a full load.
+    const hasExplicitGeography = constraints.requireEurope || constraints.requireAsia || constraints.requireAmericas || constraints.countries.length > 0;
+    const hasFollowupContext = Boolean((explicitFollowup || planner.validatedPlan?.followupReference.enabled) && !hasExplicitGeography);
+    // A session id lets the same real user land on the same side of the
+    // canary split across their whole conversation (see
+    // targeted-primary.ts's stableCanaryBucket) -- fall back to this
+    // request's own id when the client sent no session id at all, which is
+    // still deterministic per-request, just not stable across a user's
+    // multiple messages.
+    const canaryKey = sessionId !== "unknown" ? sessionId : requestId;
+    const fastPath = await attemptTargetedFastPath({
+      enabled: TARGETED_PRIMARY_ENABLED,
+      canaryRate: TARGETED_PRIMARY_CANARY_RATE,
+      canaryKey,
+      intent,
+      catalogExactTargetIds,
+      hasFollowupContext,
+      planner,
+      finalInScope,
+      question,
+      constraints,
+      catalog,
+    });
+    console.info("[chat-v2] targeted-primary", {
+      requestId,
+      selectedPath: fastPath.selectedPath,
+      fallbackReason: fastPath.fallbackReason,
+      intent,
+      legacyLoadSkipped: fastPath.selectedPath === "targeted_primary",
+    });
+    if (fastPath.selectedPath === "targeted_primary" && fastPath.cards) {
+      const cards = fastPath.cards;
+      const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
+      return buildFinalResponse({
+        requestId, question, intent, constraints, cards,
+        classified: undefined, planner, factTablesDegraded: false, runReasoner,
+      });
+    }
+
+    // Legacy fallback (lazy load): reached only when the fast path above
+    // wasn't eligible or fell back (both already logged) -- everything
+    // from here down is the pre-Phase-3B-step-2 flow, unchanged, just
+    // starting from a full load that now only happens when it's actually
+    // needed.
+    const legacyQueryStart = Date.now();
+    const { universities, factTablesDegraded } = await getChatUniversities();
+    const legacyQueryMs = Date.now() - legacyQueryStart;
+    if (factTablesDegraded) {
+      console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
+    }
     // Computed once and reused by both the early unknown-institution check
     // below and the main exactTargets resolution further down -- the planner
     // has already run by this point, so both checks must see its resolved
@@ -379,13 +585,9 @@ async function handleChatRequest(request: Request) {
     // recognizable university came from the planner (not an alias or the
     // regex name matcher) could be wrongly reported as an unknown
     // institution even though the planner had already resolved it.
-    const aliasNames = universityNamesFromAliases(question);
     const aliasTargets = aliasNames
       .map((name) => universities.find((university) => university.university_name === name))
       .filter((university): university is University => Boolean(university));
-    const plannerCanResolveTargets = planner.validatedPlan
-      && planner.validatedPlan.intent !== "university_recommendation"
-      && planner.validatedPlan.intent !== "out_of_scope";
     const plannerTargets = plannerCanResolveTargets
       ? planner.validatedPlan!.universityNames
           .map((name) => universities.find((university) => university.university_name === name))
@@ -411,7 +613,6 @@ async function handleChatRequest(request: Request) {
     }
     if (!constraints.inScope) return unsupportedDataResponse(constraints.unsupportedReason);
 
-    const intent = constraints.intent;
     const targetClarification = needsTargetClarification(
       intent,
       exactTargets.length,
@@ -471,8 +672,10 @@ async function handleChatRequest(request: Request) {
       : previousContextUniversities(universities, messages.slice(0, -1));
     const ordinal = planner.validatedPlan?.followupReference.ordinal ?? followupOrdinal(question);
     const comparisonLimit = followupComparisonLimit(question);
-    const hasExplicitGeography = constraints.requireEurope || constraints.requireAsia || constraints.requireAmericas || constraints.countries.length > 0;
-    const usePreviousResults = (explicitFollowup || planner.validatedPlan?.followupReference.enabled) && !hasExplicitGeography;
+    // hasFollowupContext (computed above, before the fast-path attempt) is
+    // the exact same formula as this flow's own usePreviousResults --
+    // reused here rather than redeclared.
+    const usePreviousResults = hasFollowupContext;
     const followupTargets = usePreviousResults
       ? ordinal && previousTargets[ordinal - 1]
         ? [previousTargets[ordinal - 1]]
@@ -487,14 +690,7 @@ async function handleChatRequest(request: Request) {
         : universities;
     const useClassification = !exactTargets.length && hasRecommendationConditions(constraints) && intent !== "cost" && intent !== "deadline";
     const classified = useClassification ? selectClassifiedCards(candidateUniversities, constraints, question) : undefined;
-    // let, not const: Phase 3B step 1 (below, after the shadow block) may
-    // replace this with the Targeted Query Builder's own result for
-    // eligible single-university lookups. Every other code path in this
-    // function keeps reading whatever "cards" holds at the point it runs --
-    // the shadow block deliberately runs BEFORE the possible reassignment
-    // so its own legacy-vs-targeted comparison always sees the true legacy
-    // result, never an already-overridden one.
-    let cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
+    const cards = classified ? [...classified.matched, ...classified.partiallyMatched] : selectCards(candidateUniversities, constraints, question);
     console.info("[chat-v2] selection", {
       requestId,
       candidateScope: followupTargets.length ? "previous_results" : exactTargets.length ? "resolved_targets" : "all_universities",
@@ -543,7 +739,11 @@ async function handleChatRequest(request: Request) {
         let targeted: Awaited<ReturnType<typeof queryRelevantUniversityFacts>> | null = null;
         let targetedError: string | undefined;
         try {
-          const catalog = await getUniversityCatalog();
+          // Reuse the catalog already loaded above (before the Phase 3B
+          // fast-path attempt) -- getUniversityCatalog() has its own
+          // in-memory cache, so re-fetching here was already cheap, but
+          // there's no reason to even do that when this scope already has
+          // the same catalog in hand.
           const grounded = groundPlannerFields({ question, validatedPlan: planner.validatedPlan });
           // makeCard/requestedFactBundle (cards.ts) always fetches the
           // PRIMARY intent's own field regardless of requestedFields -- a
@@ -642,155 +842,13 @@ async function handleChatRequest(request: Request) {
       }
     }
 
-    // Phase 3B step 1: for eligible single-university lookups only (see
-    // targeted-primary.ts's own comment for the exact scope and every
-    // fallback condition), try serving the response from the Targeted
-    // Query Builder instead of the legacy full-load pipeline. This is
-    // independent of and unrelated to the shadow block above -- shadow
-    // stays pure comparison logging regardless of this flag, and this
-    // block runs regardless of whether shadow is enabled. Every non-
-    // success outcome here keeps "cards" as the legacy result already
-    // computed above; the user's response is never affected by a Targeted-
-    // side problem, only by which already-correct cards value ends up
-    // being used.
-    const targetedPrimary = await resolveTargetedPrimary({
-      enabled: TARGETED_PRIMARY_ENABLED,
-      canaryRate: TARGETED_PRIMARY_CANARY_RATE,
-      intent,
-      exactTargets,
-      followupTargets,
-      planner,
-      finalInScope,
-      question,
-      constraints,
-      legacyById: new Map(universities.map((university) => [university.id, university])),
-    });
-    if (targetedPrimary.selectedPath === "targeted_primary" && targetedPrimary.cards) {
-      cards = targetedPrimary.cards;
-    }
-    console.info("[chat-v2] targeted-primary", {
-      requestId,
-      selectedPath: targetedPrimary.selectedPath,
-      fallbackReason: targetedPrimary.fallbackReason,
-      intent,
-    });
-
-    if (!cards.length) {
-      return NextResponse.json({
-        answer: "### 검색 결과\n\n질문 조건을 모두 확인할 수 있는 대학을 찾지 못했습니다.\n\n- 미확인 값을 조건 충족으로 간주하지 않았습니다.\n- 조건을 줄이거나 특정 대학을 지정하면 확인된 정보부터 안내할 수 있습니다.",
-        cards: [],
-        sources: [],
-        searchMode: "Supabase 구조화 필드 필터링 결과 없음",
-      });
-    }
-
-    if (classified) {
-      const detailedAnswer = constraints.requestedFields.length > 1
-        ? [
-            deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched),
-            deterministicRequestedFieldsAnswer(cards, constraints.requestedFields),
-          ].join("\n\n")
-        : deterministicClassifiedAnswer(classified.matched, classified.partiallyMatched);
-      // deterministicClassifiedAnswer always names every matched/partial card,
-      // so this should never find anything -- it exists to catch a future
-      // change to that template silently dropping a card's name, which would
-      // otherwise ship unnoticed (chat-policy.ts warns against unused
-      // safeguards; this is the same check kept from becoming one).
-      const missingFromAnswer = findCardsMissingFromAnswer(cards, detailedAnswer);
-      if (missingFromAnswer.length) {
-        console.warn("[chat-v2] card missing from classified answer text", missingFromAnswer.map((card) => card.university_id));
-      }
-      return v2Response({
-        question,
-        cards,
-        detailedAnswer,
-        planner,
-        factTablesDegraded,
-        requestId,
-        runReasoner,
-        extra: {
-          matched: classified.matched,
-          partially_matched: classified.partiallyMatched,
-          excluded_count: classified.excluded.length,
-          searchMode: "Supabase 구조화 조건 판정(충족/부분 확인/미충족)",
-        },
-      });
-    }
-
-    if (intent === "source") {
-      const sources = collectSources(cards);
-      const detailedAnswer = sources.length
-        ? [
-            "### 공식 출처",
-            "",
-            ...sources.map((source) => `- **${source.university_name || "대학"}**: [${source.title}](${source.url})`),
-          ].join("\n")
-        : ["### 공식 출처", "", "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다."].join("\n");
-      const shortAnswer = sources.length
-        ? sources.slice(0, 3).map((source) => `- [${source.university_name || source.title} 공식 출처](${source.url})`).join("\n")
-        : "현재 등록된 자료에서 연결 가능한 공식 출처를 찾지 못했습니다.";
-      // shortAnswerOverride always wins in composeShortAnswer, so the
-      // reasoner's narrative can never surface here -- calling it anyway
-      // would just be a wasted Solar round-trip for a pure source lookup.
-      return v2Response({
-        question,
-        cards,
-        detailedAnswer,
-        shortAnswerOverride: shortAnswer,
-        planner,
-        factTablesDegraded,
-        requestId,
-        runReasoner: false,
-        extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
-      });
-    }
-
-    if (constraints.requestedFields.length > 1) {
-      const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
-      return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-        extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
-      });
-    }
-
-    if (intent === "cost") {
-      const detailedAnswer = deterministicDirectCostAnswer(cards);
-      return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-        extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
-      });
-    }
-
-    if (intent === "deadline") {
-      const detailedAnswer = deterministicDeadlineAnswer(cards);
-      return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-        extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
-      });
-    }
-
-
-    if (intent === "restriction") {
-      const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
-      const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
-      return v2Response({
-        question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-        extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
-      });
-    }
-
-    if (intent === "housing" || intent === "language") {
-      const detailedAnswer = deterministicFactAnswer(cards, intent);
-      return v2Response({
-        question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-        extra: { searchMode: searchMode(intent) },
-      });
-    }
-    const detailedAnswer = deterministicGeneralAnswer(cards);
-    return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
-      extra: { searchMode: searchMode(intent) },
-    });
+    // Phase 3B step 2: the pre-load fast-path attempt (above, before
+    // getChatUniversities() ever ran) already tried the Targeted Query
+    // Builder if this request was eligible for it. Reaching this point
+    // means either it wasn't eligible (already logged) or it was attempted
+    // and fell back (also already logged) -- re-attempting Targeted again
+    // now, after paying for the full legacy load, would be pure waste.
+    return buildFinalResponse({ requestId, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner });
   } catch (error) {
     console.error("Chat route error", error);
     return NextResponse.json({ error: "챗봇 요청 처리 중 오류가 발생했습니다." }, { status: 500 });
