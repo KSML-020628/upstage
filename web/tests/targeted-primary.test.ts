@@ -113,6 +113,57 @@ describe("stableCanaryBucket / canaryRollFor: deterministic, not Math.random()-b
   });
 });
 
+describe("stableCanaryBucket: 10,000-session distribution (Phase 3B step 3 prod-canary-prep requirement)", () => {
+  const SESSION_COUNT = 10_000;
+  const sessions = Array.from({ length: SESSION_COUNT }, (_, i) => `prod-canary-prep-session-${i}`);
+
+  function selectedFraction(rate: number): number {
+    const selected = sessions.filter((key) => canaryRollFor(key, rate)).length;
+    return selected / SESSION_COUNT;
+  }
+
+  it("rate 0 selects exactly 0% of 10,000 sessions", () => {
+    assert.equal(selectedFraction(0), 0);
+  });
+
+  it("rate 0.01 selects approximately 1% (+/- 0.5 percentage points)", () => {
+    const fraction = selectedFraction(0.01);
+    assert.ok(Math.abs(fraction - 0.01) < 0.005, `expected ~1%, got ${(fraction * 100).toFixed(2)}%`);
+  });
+
+  it("rate 0.05 selects approximately 5% (+/- 1 percentage point)", () => {
+    const fraction = selectedFraction(0.05);
+    assert.ok(Math.abs(fraction - 0.05) < 0.01, `expected ~5%, got ${(fraction * 100).toFixed(2)}%`);
+  });
+
+  it("rate 0.1 selects approximately 10% (+/- 1.5 percentage points)", () => {
+    const fraction = selectedFraction(0.1);
+    assert.ok(Math.abs(fraction - 0.1) < 0.015, `expected ~10%, got ${(fraction * 100).toFixed(2)}%`);
+  });
+
+  it("rate 1 selects exactly 100% of 10,000 sessions", () => {
+    assert.equal(selectedFraction(1), 1);
+  });
+
+  it("the same sessionId repeated 100 times always selects the same side", () => {
+    const key = "prod-canary-prep-repeat-check";
+    const first = canaryRollFor(key, 0.37);
+    for (let i = 0; i < 100; i += 1) {
+      assert.equal(canaryRollFor(key, 0.37), first, `flipped on repeat #${i}`);
+    }
+  });
+
+  it("sequential sessionIds (10,000 of them) do not cluster into a narrow bucket range", () => {
+    // Regression guard for the exact bug found and fixed in Phase 3B step
+    // 2 (raw djb2 clustered session-1..session-10 onto one side) --
+    // extended here to 10,000 sequential keys at a moderate rate, checking
+    // the selected fraction is close to the configured rate rather than
+    // collapsing toward 0% or 100%.
+    const fraction = selectedFraction(0.1);
+    assert.ok(fraction > 0.07 && fraction < 0.13, `expected ~10% even over 10,000 sequential keys, got ${(fraction * 100).toFixed(2)}%`);
+  });
+});
+
 describe("attemptTargetedFastPath: eligibility gate never even attempts the Targeted path outside its scope", () => {
   it("does not attempt when the feature flag is disabled (defaults doubly safe)", async () => {
     const result = await attemptTargetedFastPath({ ...baseArgs, enabled: false });
@@ -151,9 +202,29 @@ describe("attemptTargetedFastPath: eligibility gate never even attempts the Targ
     assert.equal(result.fallbackReason, "out_of_scope");
   });
 
-  it("does not attempt when the canary rate is 0 (guaranteed miss, deterministically)", async () => {
+  it("does not attempt when the canary rate is 0 (guaranteed miss, deterministically) -- but this IS eligible, unlike the structural exclusions above", async () => {
     const result = await attemptTargetedFastPath({ ...baseArgs, canaryRate: 0 });
     assert.equal(result.fallbackReason, "canary_miss");
+    assert.equal(result.targetedEligible, true);
+    assert.equal(result.canarySelected, false);
+  });
+
+  it("every structural exclusion (not canary_miss) reports targetedEligible: false, canarySelected: false", async () => {
+    const structuralExclusions: Array<Partial<Parameters<typeof attemptTargetedFastPath>[0]>> = [
+      { enabled: false },
+      { intent: "cost" },
+      { hasFollowupContext: true },
+      { catalogExactTargetIds: [] },
+      { planner: plannerRun(null) },
+      { finalInScope: false },
+      { canaryKey: null },
+    ];
+    for (const override of structuralExclusions) {
+      const result = await attemptTargetedFastPath({ ...baseArgs, ...override });
+      assert.equal(result.targetedEligible, false, `expected targetedEligible: false for ${JSON.stringify(override)}`);
+      assert.equal(result.canarySelected, false, `expected canarySelected: false for ${JSON.stringify(override)}`);
+      assert.equal(result.targetedQueryMs, 0);
+    }
   });
 
   it("does not attempt when there is no stable canary key (canaryKey: null) -- excluded from canary, never rolled per-request", async () => {

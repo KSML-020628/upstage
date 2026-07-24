@@ -733,3 +733,97 @@ several -- a real information loss the review's own examples didn't surface
 because they were all single-test rows. Only 4/124 rows have no `test_type`
 at all; those now say "시험 종류 확인 필요" instead of guessing, per the
 review's own principle of not inventing a test from a bare score.
+
+## Phase 3B step 3: production canary pre-preparation and verification
+
+**Scope**: no code behavior change to the actual targeted-vs-legacy
+resolution/hydration path -- this step only added observability fields
+(`targetedEligible`, `canarySelected`, `targetedQueryMs`, `sessionKeyPresent`,
+`exactTargetCount`, `requestId`/`totalResponseMs` on the pipeline log, and an
+unconditional `[chat-v2] legacy-load` log that was previously only visible
+when the separate `SHADOW_ENABLED` shadow-comparison flag was on) and ran an
+extensive verification pass. Production env vars remain **untouched**:
+`CHAT_TARGETED_PRIMARY_ENABLED` defaults to `false`, `CHAT_TARGETED_PRIMARY_CANARY_RATE`
+defaults to `0` -- verified this step changes nothing about that default
+behavior (qa-runner's 32/32 pass with no env vars set at all, and every one
+of its `[chat-v2] targeted-primary` logs shows `fallbackReason:
+"flag_disabled"`).
+
+**`targetedEligible` vs `canarySelected`**: added to make "this request
+structurally qualifies for Targeted" (every gate except the canary roll
+passed) independently distinguishable from "the deterministic hash roll
+actually picked it". Every structural exclusion (wrong intent, follow-up
+context, not exactly one resolved target, no validated plan, out of scope,
+no stable session key, flag disabled) reports `targetedEligible: false` --
+there was never a roll to make for those. Only `canary_miss` reports
+`targetedEligible: true, canarySelected: false`: this request would have
+gone Targeted if the roll had gone the other way. Verified via a 7-case
+unit-test sweep and live against configs B/C/D/E below.
+
+**Live staging simulation (5 configs, 9 canonical queries: 4 allowed --
+single named university + general/language/housing/deadline intent -- and 5
+excluded -- recommendation, multi-university comparison, follow-up
+re-ranking, official-source request, out-of-scope weather)**:
+
+| Config | ENABLED | RATE | Result |
+| --- | --- | --- | --- |
+| A | false | 1 | All requests `flag_disabled`, regardless of rate -- confirms `ENABLED=false` overrides `RATE` unconditionally. |
+| B | true | 0 | Allowed queries: `canary_miss` (`targetedEligible: true`). Excluded queries: their own structural reason (`not_single_target`, `followup_not_eligible`, etc.) -- never `canary_miss`, since they never reach the roll. |
+| C | true | 0.01 | A pre-computed bucket-69 session (selected at 0.01) got `targeted_primary` on all 4 allowed queries; bucket-257 and bucket-1306 sessions both got `canary_miss`. Matches the 10,000-session distribution exactly. |
+| D | true | 0.05 | Same bucket-69 AND bucket-257 sessions (both <500) now `targeted_primary`; bucket-1306 still `canary_miss` -- confirms threshold scaling is exact, not approximate, at the single-session level. |
+| E | true | 1 | All 4 allowed queries `targeted_primary`. The "공식 출처" (official source) excluded query is structurally eligible at the intent-classification level (`intent: "language"`, not `"source"`) -- it is only correctly kept off Targeted by the `unsupported_field` safety net downstream, confirmed live (`fallbackReason: "unsupported_field"`). This makes that safety net load-bearing for source-flavored queries, not just a defensive backstop. |
+
+Same `sessionId` was confirmed stable across every allowed+excluded query
+within a config (never flips mid-session), and confirmed stable across
+configs C -> D for the same session as the rate crossed its bucket
+threshold (bucket-69 selected at both 0.01 and 0.05; bucket-257 miss at
+0.01, selected at 0.05; bucket-1306 miss at both) -- exactly the deterministic
+behavior `stableCanaryBucket` is supposed to produce, not resampled per
+request.
+
+**Response parity**: forced-Legacy (`ENABLED=false`) vs forced-Targeted
+(`ENABLED=true, RATE=1`) responses for all 4 allowed queries, same
+`sessionId`, compared on `answer` text and each card's
+`university_id`/`university_name`/`fact_bundle` -- byte-identical in all 4
+cases.
+
+**Kill switch**: live-verified both mechanisms independently. Starting from
+a config where a specific session was actively canary-selected
+(`targeted_primary`), restarting with `ENABLED=false` (RATE left at 1)
+immediately reverted that same session to `flag_disabled`; restarting
+instead with `RATE=0` (ENABLED left at true) immediately reverted it to
+`canary_miss`. Both produced a normal HTTP 200 with a non-empty `answer`
+and cards -- no code deploy involved, only an env var value + process
+restart, which is the same mechanism a Vercel env var change + redeploy
+would use. No-`sessionId` requests were separately confirmed to always
+resolve to `no_stable_canary_key` (Legacy) even at `RATE=1`.
+
+**Not live-reproduced this step (reported honestly rather than guessed)**:
+`targeted_error`, `empty_result`, and the `validation_failed` branch that
+depends on `resolveCandidateUniversityIds` diverging from the already-resolved
+target (as opposed to its other trigger, `getUniversity()` returning
+`undefined`) were not spontaneously produced by any of the 9 canonical
+queries across ~50 live requests this step. Verified via code inspection
+instead: (1) `resolveCandidateUniversityIds` is always called with
+`providedUniversityIds: [targetId]` from this path, which short-circuits
+before any filtering logic runs, so the candidate-mismatch trigger for
+`validation_failed` is effectively unreachable via this call site today --
+only the `!identity` trigger (a catalog entry whose id has no matching
+`canonical_facts` rows, a data-hygiene edge case) is realistically
+reachable; (2) the entire Targeted attempt body is wrapped in one
+try/catch with no gaps, so any real exception becomes `targeted_error`
+rather than an unhandled crash; (3) `empty_result` fires only if
+`selectCards` returns zero cards for the single resolved target, which
+requires the Planner-extracted hard filters (country/region) to actually
+contradict the target's own country -- not something the 9 canonical
+queries do. Deliberately did not fabricate live reproductions of these by
+corrupting real catalog/database data. `unsupported_field` (the one
+failure-branch reason that WAS live-reachable via a canonical query) was
+confirmed live in configs C, D, and E.
+
+**Not done in this step** (explicitly out of scope, per instruction):
+production env vars left untouched (`vercelProductionEnvStatus:
+"unverified"` -- no tool access to the actual Vercel dashboard this step;
+only local `.env.local`-driven dev servers were used to simulate each
+config), no merge to main, no recommendation/comparison/follow-up
+expansion of the Targeted path, no removal of the Legacy path.

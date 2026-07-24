@@ -160,6 +160,7 @@ function isRateLimited(request: Request) {
 
 async function v2Response(args: {
   requestId: string;
+  requestStart: number;
   question: string;
   cards: ResultCard[];
   detailedAnswer: string;
@@ -201,6 +202,7 @@ async function v2Response(args: {
   });
 
   console.info("[chat-v2] pipeline", {
+    requestId: args.requestId,
     planner: args.planner.usedSolar,
     plannerMode: resolvePlannerMode(),
     plannerIssues: args.planner.issues,
@@ -209,6 +211,11 @@ async function v2Response(args: {
     reasoner: reasoner.usedSolar,
     reasonerIssues: reasoner.issues,
     reasonerCallCount,
+    // Wall-clock time for the whole request, from the top of
+    // handleChatRequest to right before this response is returned --
+    // correlates with the earlier [chat-v2] targeted-primary log via
+    // requestId to compute Targeted vs. Legacy response time.
+    totalResponseMs: Date.now() - args.requestStart,
   });
   // Split into three distinct observability signals instead of one
   // "reasonerDisplayed" bit -- they can legitimately disagree (e.g. Solar's
@@ -264,6 +271,11 @@ async function v2Response(args: {
 // no behavior change, just a shared call site instead of one inline block.
 async function buildFinalResponse(args: {
   requestId: string;
+  // Captured at the very top of handleChatRequest -- threaded through so
+  // v2Response can log totalResponseMs (wall-clock time for the whole
+  // request, not just the reasoner call) without a separate correlated
+  // log line.
+  requestStart: number;
   question: string;
   intent: Intent;
   constraints: QueryConstraints;
@@ -273,7 +285,7 @@ async function buildFinalResponse(args: {
   factTablesDegraded: boolean;
   runReasoner: boolean;
 }) {
-  const { requestId, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner } = args;
+  const { requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner } = args;
 
   if (!cards.length) {
     return NextResponse.json({
@@ -307,6 +319,7 @@ async function buildFinalResponse(args: {
       planner,
       factTablesDegraded,
       requestId,
+      requestStart,
       runReasoner,
       extra: {
         matched: classified.matched,
@@ -340,6 +353,7 @@ async function buildFinalResponse(args: {
       planner,
       factTablesDegraded,
       requestId,
+      requestStart,
       runReasoner: false,
       extra: { searchMode: "Supabase 저장 공식 출처 직접 조회" },
     });
@@ -348,7 +362,7 @@ async function buildFinalResponse(args: {
   if (constraints.requestedFields.length > 1) {
     const detailedAnswer = deterministicRequestedFieldsAnswer(cards, constraints.requestedFields);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
       extra: { searchMode: "Supabase requestedFields 복합 근거 조회" },
     });
   }
@@ -356,7 +370,7 @@ async function buildFinalResponse(args: {
   if (intent === "cost") {
     const detailedAnswer = deterministicDirectCostAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
       extra: { searchMode: "Supabase 비용 fact 직접 조회(비교·추정 없음)" },
     });
   }
@@ -364,7 +378,7 @@ async function buildFinalResponse(args: {
   if (intent === "deadline") {
     const detailedAnswer = deterministicDeadlineAnswer(cards);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
       extra: { searchMode: "Supabase application_deadlines 필드 정렬 + 서버 검증 답변" },
     });
   }
@@ -374,7 +388,7 @@ async function buildFinalResponse(args: {
     const supportedCards = cards.filter((card) => restrictionEvidence([card]).length > 0);
     const detailedAnswer = deterministicRestrictionAnswer(supportedCards);
     return v2Response({
-      question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      question, cards: supportedCards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
       extra: { searchMode: "Supabase 수강 제한 근거 직접 조회" },
     });
   }
@@ -382,18 +396,22 @@ async function buildFinalResponse(args: {
   if (intent === "housing" || intent === "language") {
     const detailedAnswer = deterministicFactAnswer(cards, intent);
     return v2Response({
-      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+      question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
       extra: { searchMode: searchMode(intent) },
     });
   }
   const detailedAnswer = deterministicGeneralAnswer(cards);
   return v2Response({
-    question, cards, detailedAnswer, planner, factTablesDegraded, requestId, runReasoner,
+    question, cards, detailedAnswer, planner, factTablesDegraded, requestId, requestStart, runReasoner,
     extra: { searchMode: searchMode(intent) },
   });
 }
 
 async function handleChatRequest(request: Request) {
+  // Captured before any other work so totalResponseMs (logged in
+  // v2Response's pipeline log) reflects true end-to-end wall-clock time,
+  // not just the time from wherever requestId happens to be generated.
+  const requestStart = Date.now();
   if (isRateLimited(request)) {
     return NextResponse.json({ error: "질문이 너무 빠르게 반복되고 있습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 429 });
   }
@@ -569,22 +587,32 @@ async function handleChatRequest(request: Request) {
       catalog,
     });
     const legacyLoadSkipped = fastPath.selectedPath === "targeted_primary";
+    // Deliberately excludes the raw question text, fact bundle content, and
+    // any other user-supplied or fact-table content -- every field here is
+    // either a count, a boolean, a fixed enum-like reason string, or a
+    // duration, none of which can leak what a user actually asked or what
+    // data was returned.
     console.info("[chat-v2] targeted-primary", {
       requestId,
-      selectedPath: fastPath.selectedPath,
-      fallbackReason: fastPath.fallbackReason,
+      sessionKeyPresent: canaryKey !== null,
       intent,
+      exactTargetCount: catalogExactTargetIds.length,
+      targetedEligible: fastPath.targetedEligible,
+      canarySelected: fastPath.canarySelected,
+      selectedPath: fastPath.selectedPath,
       targetedAttempted: fastPath.targetedAttempted,
       targetedSucceeded: fastPath.targetedSucceeded,
       legacyLoadTriggered: !legacyLoadSkipped,
       legacyLoadSkipped,
+      fallbackReason: fastPath.fallbackReason,
       plannerCallCount,
+      targetedQueryMs: fastPath.targetedQueryMs,
     });
     if (fastPath.selectedPath === "targeted_primary" && fastPath.cards) {
       const cards = fastPath.cards;
       const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
       return buildFinalResponse({
-        requestId, question, intent, constraints, cards,
+        requestId, requestStart, question, intent, constraints, cards,
         classified: undefined, planner, factTablesDegraded: false, runReasoner,
       });
     }
@@ -597,6 +625,12 @@ async function handleChatRequest(request: Request) {
     const legacyQueryStart = Date.now();
     const { universities, factTablesDegraded } = await getChatUniversities();
     const legacyQueryMs = Date.now() - legacyQueryStart;
+    // Logged unconditionally (not just when SHADOW_ENABLED's own
+    // logShadowParity call happens to fire) so legacyQueryMs is always
+    // observable and correlatable with the earlier [chat-v2]
+    // targeted-primary log via requestId, regardless of whether shadow
+    // comparison is on.
+    console.info("[chat-v2] legacy-load", { requestId, legacyQueryMs, factTablesDegraded });
     if (factTablesDegraded) {
       console.warn("[chat-v2] running degraded", { requestId, reason: "fact_tables_unavailable" });
     }
@@ -871,7 +905,7 @@ async function handleChatRequest(request: Request) {
     // means either it wasn't eligible (already logged) or it was attempted
     // and fell back (also already logged) -- re-attempting Targeted again
     // now, after paying for the full legacy load, would be pure waste.
-    return buildFinalResponse({ requestId, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner });
+    return buildFinalResponse({ requestId, requestStart, question, intent, constraints, cards, classified, planner, factTablesDegraded, runReasoner });
   } catch (error) {
     console.error("Chat route error", error);
     return NextResponse.json({ error: "챗봇 요청 처리 중 오류가 발생했습니다." }, { status: 500 });

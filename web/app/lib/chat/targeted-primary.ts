@@ -48,14 +48,39 @@ export type TargetedPrimaryResult = {
   // consumer re-deriving the same selectedPath -> boolean mapping.
   targetedAttempted: boolean;
   targetedSucceeded: boolean;
+  // True once every gate EXCEPT the canary roll itself has passed --
+  // distinguishes "this request structurally qualifies for Targeted" from
+  // "the canary roll happened to select it" (canarySelected). A request
+  // can be eligible and still miss the roll (canary_miss); every other
+  // exclusion (wrong intent, follow-up, multi-target, no session key, out
+  // of scope, flag disabled) is NOT eligible at all -- there's no roll to
+  // make for those, they're structural exclusions, not unlucky ones.
+  targetedEligible: boolean;
+  // True only when the deterministic hash roll actually selected this
+  // request's canary key -- always false when targetedEligible is false
+  // (no roll happens if the request isn't structurally eligible first).
+  canarySelected: boolean;
+  // Wall-clock time spent inside the Targeted attempt itself (candidate
+  // resolution + fact fetch + scoped identity fetch + hydration +
+  // scoring), 0 when never attempted. Lets a production dashboard compare
+  // Targeted vs. Legacy response time on the same basis as legacyQueryMs.
+  targetedQueryMs: number;
 };
 
-function notAttempted(fallbackReason: string): TargetedPrimaryResult {
-  return { selectedPath: "legacy_default", fallbackReason, cards: null, targetedAttempted: false, targetedSucceeded: false };
+function notAttempted(fallbackReason: string, eligible = false): TargetedPrimaryResult {
+  return {
+    selectedPath: "legacy_default", fallbackReason, cards: null,
+    targetedAttempted: false, targetedSucceeded: false,
+    targetedEligible: eligible, canarySelected: false, targetedQueryMs: 0,
+  };
 }
 
-function fellBack(fallbackReason: string): TargetedPrimaryResult {
-  return { selectedPath: "legacy_fallback", fallbackReason, cards: null, targetedAttempted: true, targetedSucceeded: false };
+function fellBack(fallbackReason: string, targetedQueryMs: number): TargetedPrimaryResult {
+  return {
+    selectedPath: "legacy_fallback", fallbackReason, cards: null,
+    targetedAttempted: true, targetedSucceeded: false,
+    targetedEligible: true, canarySelected: true, targetedQueryMs,
+  };
 }
 
 // Deterministic djb2-style string hash, folded into a 0-9999 bucket. Used
@@ -140,11 +165,17 @@ export async function attemptTargetedFastPath(args: {
   if (!args.finalInScope) return notAttempted("out_of_scope");
   // No stable key to sample on (client sent no sessionId) -- excluded from
   // canary entirely rather than rolled per-request, which would make an
-  // anonymous client's assignment change on every message.
+  // anonymous client's assignment change on every message. Not "eligible":
+  // there is no roll that could ever select an anonymous request.
   if (args.canaryKey === null) return notAttempted("no_stable_canary_key");
-  if (!canaryRollFor(args.canaryKey, args.canaryRate)) return notAttempted("canary_miss");
+  // Every gate above this point is a structural exclusion; everything below
+  // is "eligible" in the sense that a canary roll is genuinely possible --
+  // canary_miss is the one case where eligible is true but the roll itself
+  // said no.
+  if (!canaryRollFor(args.canaryKey, args.canaryRate)) return notAttempted("canary_miss", true);
 
   const targetId = args.catalogExactTargetIds[0];
+  const attemptStart = Date.now();
   try {
     const grounded = groundPlannerFields({ question: args.question, validatedPlan: args.planner.validatedPlan });
     const intentField = INTENT_TO_REQUESTED_FIELD[args.intent];
@@ -168,16 +199,16 @@ export async function attemptTargetedFastPath(args: {
     // is precisely the kind of surprise this canary step must not risk
     // shipping to a real user.
     if (candidateIds.length !== 1 || candidateIds[0] !== targetId) {
-      return fellBack("validation_failed");
+      return fellBack("validation_failed", Date.now() - attemptStart);
     }
 
     const targeted = await queryRelevantUniversityFacts(candidateIds, groundedRequestedFields, candidateSource);
-    if (targeted.errors.length) return fellBack("targeted_error");
+    if (targeted.errors.length) return fellBack("targeted_error", Date.now() - attemptStart);
     // Unsupported fields (course_restrictions/source_links -- no dedicated
     // fact table) fall all the way back to legacy instead of shipping a
     // partially-composited result as if the Targeted path had produced it
     // independently -- same conservative bar as step 1.
-    if (targeted.unsupportedFields.length) return fellBack("unsupported_field");
+    if (targeted.unsupportedFields.length) return fellBack("unsupported_field", Date.now() - attemptStart);
 
     // Scoped, single-university identity fetch (city/summary/
     // profile_sections/source_links/academic_year/program_name) -- NOT the
@@ -188,7 +219,7 @@ export async function attemptTargetedFastPath(args: {
     // call already provides.
     const { getUniversity } = await import("../supabase.ts");
     const identity = await getUniversity(targetId);
-    if (!identity) return fellBack("validation_failed");
+    if (!identity) return fellBack("validation_failed", Date.now() - attemptStart);
 
     const candidateCatalogItems = args.catalog.filter((item) => item.universityId === targetId);
     const legacyById = new Map([[targetId, identity]]);
@@ -201,10 +232,14 @@ export async function attemptTargetedFastPath(args: {
     const { selectCards } = await import("./selection.ts");
     const targetedCards = selectCards(targetedUniversities, args.constraints, args.question);
 
-    if (!targetedCards.length) return fellBack("empty_result");
+    if (!targetedCards.length) return fellBack("empty_result", Date.now() - attemptStart);
 
-    return { selectedPath: "targeted_primary", fallbackReason: null, cards: targetedCards, targetedAttempted: true, targetedSucceeded: true };
+    return {
+      selectedPath: "targeted_primary", fallbackReason: null, cards: targetedCards,
+      targetedAttempted: true, targetedSucceeded: true,
+      targetedEligible: true, canarySelected: true, targetedQueryMs: Date.now() - attemptStart,
+    };
   } catch (error) {
-    return fellBack(error instanceof Error ? `targeted_error:${error.message}` : "targeted_error");
+    return fellBack(error instanceof Error ? `targeted_error:${error.message}` : "targeted_error", Date.now() - attemptStart);
   }
 }
