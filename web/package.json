@@ -19,7 +19,7 @@
     "test:queryplan": "node --experimental-strip-types --test tests/query-plan-validation.test.ts",
     "test:scope": "node --experimental-strip-types --test tests/scope-guard.test.ts",
     "test:searchconditions": "node --experimental-strip-types --test tests/search-conditions.test.ts",
-    "test:phase3": "node --experimental-strip-types --test tests/planner-grounding.test.ts tests/clarification-state.test.ts tests/targeted-query.test.ts tests/shadow-parity.test.ts tests/university-catalog.test.ts",
+    "test:phase3": "node --experimental-strip-types --test tests/planner-grounding.test.ts tests/clarification-state.test.ts tests/targeted-query.test.ts tests/shadow-parity.test.ts tests/university-catalog.test.ts tests/deadline-dates.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

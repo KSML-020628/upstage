@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import type { University } from "../../lib/types";
 import { createEvidencePacket } from "../../lib/chat/evidence-packet";
-import { runSolarPlanner, type PlannerRun, type QueryPlan } from "../../lib/chat/query-plan";
+import { runSolarPlanner, type PlannerRun } from "../../lib/chat/query-plan";
 import { getUniversityCatalog } from "../../lib/chat/university-catalog";
 import { groundPlannerFields } from "../../lib/chat/planner-grounding";
-import { queryRelevantUniversityFacts } from "../../lib/chat/targeted-query";
+import {
+  countTotalFactRows,
+  hydrateUniversitiesFromCatalog,
+  queryRelevantUniversityFacts,
+  resolveCandidateUniversityIds,
+} from "../../lib/chat/targeted-query";
 import { computeShadowParity, logShadowParity } from "../../lib/chat/shadow-parity";
 import { runSolarReasoner } from "../../lib/chat/reasoner";
 import { universityNamesFromAliases } from "../../lib/chat/university-aliases";
@@ -60,7 +65,7 @@ import {
 } from "../../lib/chat/selection";
 import { hasActionableSearchConditions, hasRecommendationConditions } from "../../lib/chat/search-conditions";
 import { getChatUniversities, refreshCurrencyRatesInBackground } from "../../lib/chat/supabase-facts";
-import type { ChatMessage, QueryConstraints, ResultCard } from "../../lib/chat/types";
+import type { ChatMessage, Intent, QueryConstraints, ResultCard } from "../../lib/chat/types";
 
 export const runtime = "nodejs";
 
@@ -68,6 +73,21 @@ const MAX_MESSAGES = 8;
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_REQUESTS = 10;
+
+// Inverse of constraints.ts's REQUEST_FIELD_TO_INTENT -- the Phase 3A.1
+// shadow query needs to know which fact table the PRIMARY intent alone
+// implies, since cards.ts's own requestedFactBundle() always fetches that
+// field regardless of whether constraints.requestedFields lists it.
+const INTENT_TO_REQUESTED_FIELD: Partial<Record<Intent, string>> = {
+  general: "universities",
+  language: "language_requirements",
+  housing: "housing_options",
+  cost: "estimated_costs",
+  deadline: "application_deadlines",
+  quota: "quota_facts",
+  restriction: "course_restrictions",
+  source: "source_links",
+};
 
 const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -451,34 +471,85 @@ async function handleChatRequest(request: Request) {
     // multi-card set) are exactly the cases with something worth explaining.
     const runReasoner = cards.length >= 2 || hasRecommendationConditions(constraints) || explicitFollowup;
 
-    // Phase 3A shadow run (see docs/decisions.md): a Planner-first Targeted
-    // Query Builder executes alongside the real, unchanged legacy pipeline
-    // ABOVE this line, purely for comparison logging and latency
+    // Phase 3A/3A.1 shadow run (see docs/decisions.md): a Planner-first
+    // Targeted Query Builder executes alongside the real, unchanged legacy
+    // pipeline ABOVE this line, purely for comparison logging and latency
     // measurement. Its result is NEVER used for the actual response -- not
     // for cards, not for shortAnswer, and a failure here must never surface
     // to the user, hence the isolating try/catch that only ever logs.
+    //
+    // Phase 3A.1: the candidate ID set is now, whenever possible, the SAME
+    // exactTargets/followupTargets our own alias/legacy-name resolution
+    // already computed above (not a re-resolution against the catalog) --
+    // and the hydrated targeted University[] is run through the exact same
+    // selectCards/selectClassifiedCards the legacy path just used, with the
+    // exact same constraints. No separate targeted-only evaluator or ranker
+    // exists anywhere in this codebase.
     if (planner.validatedPlan) {
       try {
         const targetedStart = Date.now();
+        let targetedCards: ResultCard[] = [];
         let targeted: Awaited<ReturnType<typeof queryRelevantUniversityFacts>> | null = null;
         let targetedError: string | undefined;
         try {
           const catalog = await getUniversityCatalog();
           const grounded = groundPlannerFields({ question, validatedPlan: planner.validatedPlan });
-          const safePlan: QueryPlan = {
-            ...planner.validatedPlan,
-            hardFilters: {
-              ...planner.validatedPlan.hardFilters,
-              housingAvailable: grounded.housingAvailable.value,
-              housingGuaranteed: grounded.housingGuaranteed.value,
-              semesters: grounded.semesters.value,
-              majors: grounded.majors.value,
-              officialSourceRequired: grounded.officialSourceRequired.value,
-              numericCostRequired: grounded.requireClearCost.value,
-            },
-            requestedFields: grounded.requestedFields.value.length ? grounded.requestedFields.value : planner.validatedPlan.requestedFields,
-          };
-          targeted = await queryRelevantUniversityFacts(safePlan, catalog);
+          // makeCard/requestedFactBundle (cards.ts) always fetches the
+          // PRIMARY intent's own field regardless of requestedFields -- a
+          // plain "IELTS 6.0 유럽 대학 추천해줘" (intent: language) never
+          // populates constraints.requestedFields at all, since the intent
+          // itself is what drives which fact table matters. Without this,
+          // the targeted query fetched zero tables for exactly these
+          // single-intent recommendation questions (fetchedTables: [],
+          // queryCount: 0) even though a real candidate set was resolved.
+          const intentField = INTENT_TO_REQUESTED_FIELD[intent];
+          const groundedRequestedFields = [...new Set([
+            ...(intentField ? [intentField] : []),
+            ...(grounded.requestedFields.value.length ? grounded.requestedFields.value : constraints.requestedFields),
+          ])];
+
+          const providedUniversityIds = followupTargets.length
+            ? followupTargets.map((university) => university.id)
+            : exactTargets.length
+              ? exactTargets.map((university) => university.id)
+              : undefined;
+
+          const { ids: candidateIds, source: candidateSource } = await resolveCandidateUniversityIds({
+            plan: planner.validatedPlan,
+            catalog,
+            providedUniversityIds,
+            // Use the FINAL merged constraints (the same object the common
+            // evaluator below will check), not a separately re-grounded
+            // value -- candidate narrowing must never be stricter than what
+            // the evaluator itself would accept, or recall could drop below
+            // 100%.
+            groundedHousingAvailable: constraints.requireHousing,
+            groundedHousingGuaranteed: constraints.requireHousingGuaranteed,
+            groundedLanguageTest: constraints.languageTest,
+          });
+
+          targeted = await queryRelevantUniversityFacts(candidateIds, groundedRequestedFields, candidateSource);
+
+          // Only hydrate the RESOLVED candidates -- passing the whole
+          // catalog here (a real bug caught by the Phase 3A.1 live re-test:
+          // Q10/Q11 both deterministically substituted 4 arbitrary
+          // universities for the single, correctly-resolved Sheffield ID)
+          // fed 53 mostly-empty University objects into the common
+          // evaluator, which then scored/selected among ALL of them instead
+          // of just the intended candidate.
+          const candidateIdSet = new Set(candidateIds);
+          const candidateCatalogItems = catalog.filter((item) => candidateIdSet.has(item.universityId));
+          const legacyById = new Map(universities.map((university) => [university.id, university]));
+          const targetedUniversities = hydrateUniversitiesFromCatalog(candidateCatalogItems, targeted.factBundles, legacyById);
+          // Common evaluator reuse: identical selectCards/selectClassifiedCards
+          // call the legacy path made above, just fed the targeted-hydrated
+          // University[] instead of the fully-loaded one.
+          const targetedClassified = useClassification
+            ? selectClassifiedCards(targetedUniversities, constraints, question)
+            : undefined;
+          targetedCards = targetedClassified
+            ? [...targetedClassified.matched, ...targetedClassified.partiallyMatched]
+            : selectCards(targetedUniversities, constraints, question);
         } catch (error) {
           targetedError = error instanceof Error ? error.message : String(error);
         }
@@ -487,9 +558,11 @@ async function handleChatRequest(request: Request) {
           requestId,
           intent,
           legacyCards: cards,
+          targetedCards,
           targeted,
           targetedError,
           legacyQueryMs,
+          legacyTotalFactRows: countTotalFactRows(universities),
           targetedQueryMs,
         }));
       } catch (shadowError) {

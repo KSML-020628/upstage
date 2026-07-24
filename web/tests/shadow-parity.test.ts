@@ -11,12 +11,26 @@ function card(overrides: Partial<ResultCard> & { university_id: string; universi
   };
 }
 
+function targetedResult(overrides: Partial<TargetedQueryResult> = {}): TargetedQueryResult {
+  return {
+    universityIds: [],
+    candidateSource: "provided_target_ids",
+    fetchedTables: [],
+    queryCount: 0,
+    rowCountsByTable: {},
+    factBundles: [],
+    unsupportedFields: [],
+    errors: [],
+    ...overrides,
+  };
+}
+
 describe("computeShadowParity: a Targeted Query failure never throws and is reported, not hidden", () => {
   it("reports shadow_error when the targeted query is null (failed), without throwing", () => {
     const legacyCards = [card({ university_id: "u-1", university_name: "A" })];
     const parity = computeShadowParity({
-      requestId: "r1", intent: "housing", legacyCards, targeted: null, targetedError: "network_down",
-      legacyQueryMs: 10, targetedQueryMs: 5,
+      requestId: "r1", intent: "housing", legacyCards, targetedCards: [], targeted: null, targetedError: "network_down",
+      legacyQueryMs: 10, legacyTotalFactRows: 5, targetedQueryMs: 5,
     });
     assert.equal(parity.parityStatus, "shadow_error");
     assert.deepEqual(parity.targetedErrors, ["network_down"]);
@@ -24,51 +38,60 @@ describe("computeShadowParity: a Targeted Query failure never throws and is repo
   });
 });
 
-describe("computeShadowParity: ID set and order comparison", () => {
-  it("reports exact when IDs and order match exactly", () => {
-    const legacyCards = [card({ university_id: "u-1", university_name: "A" }), card({ university_id: "u-2", university_name: "B" })];
-    const targeted: TargetedQueryResult = {
-      universityIds: ["u-1", "u-2"],
-      fetchedTables: ["housing_facts"],
-      rowCountsByTable: { housing_facts: 2 },
-      factBundles: [
-        { universityId: "u-1", universityName: "A", facts: { housing_options: [{ source_url: "https://a" }] } },
-        { universityId: "u-2", universityName: "B", facts: { housing_options: [{ source_url: "https://b" }] } },
-      ],
-      errors: [],
-    };
-    legacyCards[0].fact_bundle = [{ value: "x", source_url: "https://a" }];
-    legacyCards[1].fact_bundle = [{ value: "y", source_url: "https://b" }];
+describe("computeShadowParity: common-evaluator comparison (both sides run the same selectCards/selectClassifiedCards)", () => {
+  it("reports exact when IDs, order, and every compared field match", () => {
+    const legacyCards = [
+      card({ university_id: "u-1", university_name: "A", fact_bundle: [{ field_key: "housing_options", value: "guaranteed" }], condition_checks: [{ key: "housing_guaranteed", label: "배정 보장", state: "met", detail: "보장" }] }),
+      card({ university_id: "u-2", university_name: "B", fact_bundle: [{ field_key: "housing_options", value: "guaranteed" }], condition_checks: [{ key: "housing_guaranteed", label: "배정 보장", state: "met", detail: "보장" }] }),
+    ];
+    const targetedCards = legacyCards.map((c) => ({ ...c }));
+    const targeted = targetedResult({ universityIds: ["u-1", "u-2"], fetchedTables: ["housing_facts"], rowCountsByTable: { housing_facts: 2 } });
     const parity = computeShadowParity({
-      requestId: "r2", intent: "housing", legacyCards, targeted, legacyQueryMs: 10, targetedQueryMs: 8,
+      requestId: "r2", intent: "housing", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 100, targetedQueryMs: 8,
     });
     assert.equal(parity.parityStatus, "exact");
     assert.equal(parity.orderMatches, true);
+    assert.equal(parity.conditionStateParity, "exact");
     assert.deepEqual(parity.missingFromTargeted, []);
     assert.deepEqual(parity.extraInTargeted, []);
   });
 
   it("reports mismatch when the targeted query missed a university the legacy path found", () => {
     const legacyCards = [card({ university_id: "u-1", university_name: "A" }), card({ university_id: "u-2", university_name: "B" })];
-    const targeted: TargetedQueryResult = {
-      universityIds: ["u-1"],
-      fetchedTables: ["housing_facts"],
-      rowCountsByTable: { housing_facts: 1 },
-      factBundles: [{ universityId: "u-1", universityName: "A", facts: {} }],
-      errors: [],
-    };
+    const targetedCards = [card({ university_id: "u-1", university_name: "A" })];
+    const targeted = targetedResult({ universityIds: ["u-1"], fetchedTables: ["housing_facts"], rowCountsByTable: { housing_facts: 1 } });
     const parity = computeShadowParity({
-      requestId: "r3", intent: "housing", legacyCards, targeted, legacyQueryMs: 10, targetedQueryMs: 8,
+      requestId: "r3", intent: "housing", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 50, targetedQueryMs: 8,
     });
     assert.equal(parity.parityStatus, "mismatch");
     assert.deepEqual(parity.missingFromTargeted, ["u-2"]);
   });
 
-  it("always reports conditionStateParity/unknownFieldParity as not_computed_by_targeted", () => {
+  it("reports equivalent when the ID set matches but order differs and all fields still match", () => {
+    const legacyCards = [
+      card({ university_id: "u-1", university_name: "A", condition_checks: [] }),
+      card({ university_id: "u-2", university_name: "B", condition_checks: [] }),
+    ];
+    const targetedCards = [
+      card({ university_id: "u-2", university_name: "B", condition_checks: [] }),
+      card({ university_id: "u-1", university_name: "A", condition_checks: [] }),
+    ];
+    const targeted = targetedResult({ universityIds: ["u-2", "u-1"] });
     const parity = computeShadowParity({
-      requestId: "r4", intent: "housing", legacyCards: [], targeted: null, legacyQueryMs: 1, targetedQueryMs: 1,
+      requestId: "r4", intent: "housing", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 10, targetedQueryMs: 8,
     });
-    assert.equal(parity.conditionStateParity, "not_computed_by_targeted");
-    assert.equal(parity.unknownFieldParity, "not_computed_by_targeted");
+    assert.equal(parity.orderMatches, false);
+    assert.equal(parity.parityStatus, "equivalent");
+  });
+
+  it("detects a real condition_checks divergence (e.g. targeted data disagrees on match_status)", () => {
+    const legacyCards = [card({ university_id: "u-1", university_name: "A", condition_checks: [{ key: "housing_guaranteed", label: "배정 보장", state: "met", detail: "보장" }] })];
+    const targetedCards = [card({ university_id: "u-1", university_name: "A", condition_checks: [{ key: "housing_guaranteed", label: "배정 보장", state: "unknown", detail: "확인 필요" }] })];
+    const targeted = targetedResult({ universityIds: ["u-1"] });
+    const parity = computeShadowParity({
+      requestId: "r5", intent: "housing", legacyCards, targetedCards, targeted, legacyQueryMs: 10, legacyTotalFactRows: 10, targetedQueryMs: 8,
+    });
+    assert.equal(parity.conditionStateParity, "partial_mismatch");
+    assert.equal(parity.parityStatus, "mismatch");
   });
 });

@@ -1,5 +1,7 @@
 import type { QueryPlan } from "./query-plan.ts";
+import type { University } from "../types";
 import type { UniversityCatalogItem } from "./university-catalog.ts";
+import { LANGUAGE_TEST_ALIASES, type LanguageTestName } from "./types.ts";
 import {
   normalizeCostFact,
   normalizeDeadlineFact,
@@ -8,6 +10,7 @@ import {
   normalizeQuotaFact,
   requestFactRows,
   requestOptionalFactRows,
+  supabaseServerRequest,
 } from "./supabase-facts.ts";
 
 export type UniversityFactBundle = {
@@ -15,29 +18,35 @@ export type UniversityFactBundle = {
   universityName: string;
   country?: string;
   // Keyed by requestedFields name (language_requirements/housing_options/
-  // application_deadlines/estimated_costs/quota_facts), not raw table name --
-  // matches the vocabulary the Planner and the rest of the chat pipeline
-  // already use, so a caller never has to know the underlying table names.
+  // application_deadlines/estimated_costs/quota_facts), not raw table name.
   facts: Record<string, Record<string, unknown>[]>;
 };
 
+export type CandidateSource = "provided_target_ids" | "exact_name_match" | "catalog_region_filter" | "candidate_id_search";
+
 export type TargetedQueryResult = {
   universityIds: string[];
+  // Set by the caller from resolveCandidateUniversityIds's own result --
+  // this function only does stage 2 (hydration), not candidate resolution,
+  // so it has no opinion on where the ID list came from.
+  candidateSource: CandidateSource;
   fetchedTables: string[];
+  queryCount: number;
   rowCountsByTable: Record<string, number>;
   factBundles: UniversityFactBundle[];
+  // Fields with no dedicated fact table today (course_restrictions,
+  // source_links) -- the caller (route.ts's shadow block) explicitly
+  // borrows these from the legacy University object instead of pretending
+  // the Targeted Query Builder fetched them independently.
+  unsupportedFields: string[];
   errors: string[];
 };
 
-// Allowlist: requestedFields value -> [DB table, normalizer, optional?]. No
-// other table is ever queried, and only for the university IDs explicitly
-// passed in -- Solar never sees or builds a query string; this Object is the
-// only thing that decides what gets fetched.
 const FIELD_TABLE_ALLOWLIST: Record<
   string,
   { table: string; select: string; normalize: (row: Record<string, unknown>) => Record<string, unknown>; optional?: boolean } | null
 > = {
-  universities: null, // base catalog info only, no extra table
+  universities: null,
   language_requirements: {
     table: "language_requirements",
     select: "id,university_id,language,test_type,minimum_score,minimum_subscores,cefr_level,is_required,notes,source_url,source_type,evidence_quote,confidence,review_status,issue_notes",
@@ -64,19 +73,14 @@ const FIELD_TABLE_ALLOWLIST: Record<
     normalize: normalizeQuotaFact,
     optional: true,
   },
-  // No dedicated fact table exists for these two today -- both are only
-  // ever populated from the full ui_profile_json blob (see the Phase 3A
-  // pipeline investigation), which the Targeted Query Builder must NOT
-  // fetch (that would defeat the entire point of "targeted"). Requesting
-  // either surfaces as a non-fatal error entry, not a thrown exception --
-  // this is a real, found gap in today's schema, not a bug in this builder.
+  // No dedicated fact table exists for these two -- both are only ever
+  // populated from the full ui_profile_json blob, which the Targeted Query
+  // Builder must not fetch (that would defeat "targeted"). The caller falls
+  // back to the legacy University's own values for these specific fields.
   course_restrictions: null,
   source_links: null,
 };
 
-// Pure, network-free allowlist decision -- exported so tests can verify
-// "a table not implied by requestedFields is never queried" without needing
-// to mock Supabase network calls.
 export function tablesForRequestedFields(requestedFields: string[]): { tables: string[]; unsupported: string[] } {
   const fields = requestedFields.length ? requestedFields : ["universities"];
   const tables: string[] = [];
@@ -90,21 +94,9 @@ export function tablesForRequestedFields(requestedFields: string[]): { tables: s
   return { tables, unsupported };
 }
 
-export function resolveTargetUniversityIds(plan: QueryPlan, catalog: UniversityCatalogItem[]): UniversityCatalogItem[] {
-  if (plan.universityNames.length) {
-    const byName = new Map(catalog.map((item) => [item.universityName, item]));
-    return plan.universityNames.flatMap((name) => {
-      const item = byName.get(name);
-      return item ? [item] : [];
-    });
-  }
-  // No specific university named (a recommendation/collection query) --
-  // "targeted" here means targeted COLUMNS (only the requested fact tables)
-  // and, when the plan carries a region/country condition, targeted ROWS
-  // too (filtered using only the thin catalog's own country/region field,
-  // never touching fact data to decide which universities are in scope).
-  const regions = new Set([...(plan.hardFilters.regions ?? [])].map((r) => r.toLowerCase()));
-  const excludedRegions = new Set([...(plan.hardFilters.excludedRegions ?? [])].map((r) => r.toLowerCase()));
+function filterCatalogByRegionCountry(plan: QueryPlan, catalog: UniversityCatalogItem[]): UniversityCatalogItem[] {
+  const regions = new Set((plan.hardFilters.regions ?? []).map((r) => r.toLowerCase()));
+  const excludedRegions = new Set((plan.hardFilters.excludedRegions ?? []).map((r) => r.toLowerCase()));
   const countries = new Set((plan.hardFilters.countries ?? []).map((c) => c.toLowerCase()));
   const excludedCountries = new Set((plan.hardFilters.excludedCountries ?? []).map((c) => c.toLowerCase()));
   return catalog.filter((item) => {
@@ -116,25 +108,125 @@ export function resolveTargetUniversityIds(plan: QueryPlan, catalog: UniversityC
   });
 }
 
+function distinctUniversityIds(rows: Record<string, unknown>[]): string[] {
+  return [...new Set(rows.map((row) => row.university_id).filter((id): id is string => typeof id === "string"))];
+}
+
+// Stage-1 candidate narrowing via a fact table -- ONLY used where the SQL
+// filter can never drop a university the common evaluator would have
+// accepted (candidate recall must stay 100%). housing_guaranteed/
+// housing_available are plain booleans, but evaluateUniversity (filters.ts)
+// treats a university with no true/false row at all as "unknown", which
+// still surfaces in the shown card list (the partiallyMatched bucket) --
+// only a university whose rows are ALL explicitly false is a true negative.
+// So the guaranteed-housing filter must match true OR null rows, not eq.true
+// alone; querying eq.true only silently dropped every null-only university
+// from the candidate set before hydration ever got a chance to run them
+// through the real evaluator (confirmed live against Q6 "기숙사 배정이
+// 보장되는 대학을 추천해줘": 3 legacy-shown universities all had
+// housing_guaranteed: null in every housing_facts row). A university with
+// only null+false rows can slip in as an over-inclusive false positive here
+// -- that's fine, stage 2's hydration + the real evaluator will correctly
+// exclude it; over-inclusion never breaks recall, only under-inclusion does.
+async function candidateIdsFromHousing(args: { housingGuaranteed?: boolean; housingAvailable?: boolean }): Promise<string[] | null> {
+  // passesStructuredFilters (filters.ts) also checks a fallback
+  // is_guaranteed column, but that field only ever appears in
+  // ui_profile_json-sourced housing_options rows -- the structured
+  // housing_facts TABLE (what this queries) has no such column at all
+  // (confirmed live: querying it throws a real Postgres 42703 "column does
+  // not exist" error). housing_guaranteed is the only column that exists
+  // here.
+  const filter = args.housingGuaranteed
+    ? "or=(housing_guaranteed.eq.true,housing_guaranteed.is.null)"
+    : args.housingAvailable
+      ? "housing_available=eq.true"
+      : null;
+  if (!filter) return null;
+  const rows = await supabaseServerRequest<Record<string, unknown>[]>(
+    `housing_facts?select=university_id&${filter}&review_status=neq.rejected&limit=1000`,
+  );
+  return distinctUniversityIds(rows);
+}
+
+// Deliberately does NOT filter by minimum_score at the SQL level (the real
+// comparison is "this university's requirement <= the student's own
+// score", which needs per-row numeric evaluation the common evaluator
+// already does correctly) -- only narrows by test_type, using the exact
+// same alias substrings matchesLanguageTest (filters.ts) checks, so this
+// can't silently exclude a row the common evaluator would have accepted.
+async function candidateIdsFromLanguage(languageTest?: LanguageTestName): Promise<string[] | null> {
+  if (!languageTest) return null;
+  const aliases = LANGUAGE_TEST_ALIASES[languageTest];
+  const orFilter = aliases.map((alias) => `test_type.ilike.*${alias}*`).join(",");
+  const rows = await supabaseServerRequest<Record<string, unknown>[]>(
+    `language_requirements?select=university_id&or=(${orFilter})&review_status=neq.rejected&limit=1000`,
+  );
+  return distinctUniversityIds(rows);
+}
+
+export async function resolveCandidateUniversityIds(args: {
+  plan: QueryPlan;
+  catalog: UniversityCatalogItem[];
+  // Already resolved by route.ts's own alias/legacy-name/follow-up matching
+  // (exactTargets/followupTargets) -- when present, used DIRECTLY instead of
+  // re-resolving via the catalog, so a case like "셰필드 기숙사" (which our
+  // own alias system already resolves correctly) never falls back to
+  // scanning the whole catalog.
+  providedUniversityIds?: string[];
+  groundedHousingAvailable?: boolean;
+  groundedHousingGuaranteed?: boolean;
+  groundedLanguageTest?: LanguageTestName;
+}): Promise<{ ids: string[]; source: CandidateSource; queryCount: number }> {
+  if (args.providedUniversityIds?.length) {
+    return { ids: args.providedUniversityIds, source: "provided_target_ids", queryCount: 0 };
+  }
+  if (args.plan.universityNames.length) {
+    const byName = new Map(args.catalog.map((item) => [item.universityName, item.universityId]));
+    const ids = args.plan.universityNames.flatMap((name) => {
+      const id = byName.get(name);
+      return id ? [id] : [];
+    });
+    return { ids, source: "exact_name_match", queryCount: 0 };
+  }
+
+  // Recommendation-style query, no named university -- 2-stage candidate
+  // search: (1) catalog region/country filter (no query, uses the
+  // already-loaded thin catalog), (2) intersect with any fact-table
+  // candidate search that has a safe, recall-preserving SQL filter.
+  const regionFiltered = filterCatalogByRegionCountry(args.plan, args.catalog).map((item) => item.universityId);
+  const factCandidateResults = await Promise.all([
+    candidateIdsFromHousing({ housingGuaranteed: args.groundedHousingGuaranteed, housingAvailable: args.groundedHousingAvailable }),
+    candidateIdsFromLanguage(args.groundedLanguageTest),
+  ]);
+  const factCandidateSets = factCandidateResults.filter((set): set is string[] => set !== null);
+  if (!factCandidateSets.length) {
+    return { ids: regionFiltered, source: "catalog_region_filter", queryCount: 0 };
+  }
+  const intersected = regionFiltered.filter((id) => factCandidateSets.every((set) => set.includes(id)));
+  return { ids: intersected, source: "candidate_id_search", queryCount: factCandidateResults.length };
+}
+
+// Stage 2: full-row hydration for exactly the resolved candidate IDs and
+// exactly the allowlisted tables implied by requestedFields -- no other
+// table or university is ever touched.
 export async function queryRelevantUniversityFacts(
-  plan: QueryPlan,
-  catalog: UniversityCatalogItem[],
+  universityIds: string[],
+  requestedFields: string[],
+  candidateSource: CandidateSource,
 ): Promise<TargetedQueryResult> {
   const errors: string[] = [];
-  const targets = resolveTargetUniversityIds(plan, catalog);
-  const universityIds = targets.map((item) => item.universityId);
-
-  const requestedFields = plan.requestedFields.length ? plan.requestedFields : ["universities"];
+  const { unsupported } = tablesForRequestedFields(requestedFields);
+  const fields = requestedFields.length ? requestedFields : ["universities"];
   const fetchedTables: string[] = [];
   const rowCountsByTable: Record<string, number> = {};
-  const rowsByField = new Map<string, Map<string, Record<string, unknown>[]>>(); // field -> universityId -> rows
+  const rowsByField = new Map<string, Map<string, Record<string, unknown>[]>>();
+  let queryCount = 0;
 
-  for (const field of requestedFields) {
+  for (const field of fields) {
     const entry = FIELD_TABLE_ALLOWLIST[field];
-    if (entry === undefined) { errors.push(`unallowlisted_field:${field}`); continue; }
-    if (entry === null) { if (field !== "universities") errors.push(`no_dedicated_fact_table:${field}`); continue; }
-    if (!universityIds.length) continue;
+    if (entry === undefined || entry === null || !universityIds.length) continue;
     try {
+      queryCount += 1;
       const rows = entry.optional
         ? await requestOptionalFactRows(entry.table, universityIds, entry.select)
         : await requestFactRows(entry.table, universityIds, entry.select);
@@ -144,8 +236,7 @@ export async function queryRelevantUniversityFacts(
       for (const row of rows) {
         const universityId = typeof row.university_id === "string" ? row.university_id : undefined;
         if (!universityId) continue;
-        const normalized = entry.normalize(row);
-        byUniversity.set(universityId, [...(byUniversity.get(universityId) ?? []), normalized]);
+        byUniversity.set(universityId, [...(byUniversity.get(universityId) ?? []), entry.normalize(row)]);
       }
       rowsByField.set(field, byUniversity);
     } catch (error) {
@@ -153,14 +244,74 @@ export async function queryRelevantUniversityFacts(
     }
   }
 
-  const factBundles: UniversityFactBundle[] = targets.map((item) => ({
-    universityId: item.universityId,
-    universityName: item.universityName,
-    country: item.country,
+  const factBundles: UniversityFactBundle[] = universityIds.map((id) => ({
+    universityId: id,
+    universityName: "",
     facts: Object.fromEntries(
-      [...rowsByField.entries()].map(([field, byUniversity]) => [field, byUniversity.get(item.universityId) ?? []]),
+      [...rowsByField.entries()].map(([field, byUniversity]) => [field, byUniversity.get(id) ?? []]),
     ),
   }));
 
-  return { universityIds, fetchedTables, rowCountsByTable, factBundles, errors };
+  return { universityIds, candidateSource, fetchedTables, queryCount, rowCountsByTable, factBundles, unsupportedFields: unsupported, errors };
+}
+
+// Builds the SAME University shape the legacy pipeline uses
+// (exchange_programs[0]), so the caller can feed it into the EXACT SAME
+// evaluateUniversity/passesStructuredFilters/selectCards/
+// selectClassifiedCards functions the legacy path uses -- no separate
+// targeted-only evaluator or ranker is implemented anywhere. Fields with no
+// dedicated fact table (course_restrictions, source_links) are explicitly
+// borrowed from the corresponding legacy University when available, never
+// silently left as an independently-targeted-but-actually-empty value.
+export function hydrateUniversitiesFromCatalog(
+  catalogItems: UniversityCatalogItem[],
+  factBundles: UniversityFactBundle[],
+  legacyById: Map<string, University>,
+): University[] {
+  const bundleById = new Map(factBundles.map((bundle) => [bundle.universityId, bundle]));
+  return catalogItems.map((item): University => {
+    const bundle = bundleById.get(item.universityId);
+    const legacy = legacyById.get(item.universityId);
+    const legacyProgram = legacy?.exchange_programs?.[0];
+    return {
+      id: item.universityId,
+      university_name: item.universityName,
+      country: item.country ?? legacy?.country ?? "",
+      city: legacy?.city ?? "",
+      summary: legacy?.summary ?? "",
+      latitude: legacy?.latitude ?? 0,
+      longitude: legacy?.longitude ?? 0,
+      exchange_programs: [{
+        id: legacyProgram?.id ?? `${item.universityId}-targeted`,
+        university_id: item.universityId,
+        academic_year: legacyProgram?.academic_year ?? "",
+        program_name: legacyProgram?.program_name ?? "",
+        language_requirements: bundle?.facts.language_requirements ?? [],
+        housing_options: bundle?.facts.housing_options ?? [],
+        application_deadlines: bundle?.facts.application_deadlines ?? [],
+        estimated_costs: bundle?.facts.estimated_costs ?? [],
+        quota_facts: bundle?.facts.quota_facts ?? [],
+        course_restrictions: legacyProgram?.course_restrictions ?? [],
+        source_links: legacyProgram?.source_links ?? [],
+      }],
+    };
+  });
+}
+
+// Fair, apples-to-apples row-count basis for BOTH sides: total raw fact
+// rows represented in memory, not a post-selection card count. Used for
+// the legacy side by summing every loaded University's own fact arrays.
+export function countTotalFactRows(universities: University[]): number {
+  return universities.reduce((sum, university) => {
+    const program = university.exchange_programs?.[0];
+    if (!program) return sum;
+    return sum
+      + (program.language_requirements?.length ?? 0)
+      + (program.housing_options?.length ?? 0)
+      + (program.application_deadlines?.length ?? 0)
+      + (program.estimated_costs?.length ?? 0)
+      + (program.quota_facts?.length ?? 0)
+      + (program.course_restrictions?.length ?? 0)
+      + (program.source_links?.length ?? 0);
+  }, 0);
 }

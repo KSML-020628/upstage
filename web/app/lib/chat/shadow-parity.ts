@@ -6,6 +6,7 @@ export type ShadowParityStatus = "exact" | "equivalent" | "mismatch" | "shadow_e
 export type ShadowParityLog = {
   requestId: string;
   intent: string;
+  candidateSource: string;
 
   legacyUniversityIds: string[];
   targetedUniversityIds: string[];
@@ -14,93 +15,98 @@ export type ShadowParityLog = {
   extraInTargeted: string[];
   orderMatches: boolean;
 
+  // Both legacyCards and targetedCards are produced by the SAME
+  // evaluateUniversity/selectCards/selectClassifiedCards functions (see
+  // route.ts's shadow block) -- the only difference is which University[]
+  // was fed in (full legacy load vs targeted-hydrated). This makes these
+  // comparisons meaningful, unlike Phase 3A's original raw-fact-presence
+  // check: condition_checks/match_status/unknown_fields come from the same
+  // decision logic on both sides now, not from a targeted-only fact dump.
   factValueParity: "exact" | "partial_mismatch" | "not_applicable";
   sourceParity: "exact" | "partial_mismatch" | "not_applicable";
-  // Phase 3A's Targeted Query Builder only fetches raw fact rows -- it does
-  // not re-run evaluateUniversity's condition-state decision logic (that's a
-  // real, intentional scope boundary: Phase 3A validates DB access parity,
-  // not decision-logic parity, per the phase's own instructions). This is
-  // always "not_computed_by_targeted" rather than a real comparison result --
-  // recorded explicitly so a reader of the log never mistakes its absence
-  // for an "exact" match on this dimension.
-  conditionStateParity: "not_computed_by_targeted";
-  unknownFieldParity: "not_computed_by_targeted";
+  conditionStateParity: "exact" | "partial_mismatch" | "not_applicable";
+  unknownFieldParity: "exact" | "partial_mismatch" | "not_applicable";
 
   fetchedTables: string[];
+  queryCount: number;
   rowCountsByTable: Record<string, number>;
-  legacyFetchedRowCount: number;
+  legacyTotalFactRows: number;
   targetedFetchedRowCount: number;
 
   legacyQueryMs: number;
   targetedQueryMs: number;
 
   parityStatus: ShadowParityStatus;
+  unsupportedFields: string[];
   targetedErrors: string[];
 };
 
-function legacyRowCount(cards: ResultCard[]): number {
-  return cards.reduce((sum, card) => sum + (card.fact_bundle?.length ?? 0), 0);
+function cardKey(card: ResultCard) {
+  return card.university_id;
 }
 
-// Presence-level parity, not a byte-for-byte value diff: a legacy
-// fact_bundle entry is a human-formatted display string (e.g. "IELTS 6.0
-// minimum"), while a targeted row is bare DB columns (e.g. minimum_score:6)
-// -- the two are not directly string-comparable without reimplementing
-// present-fact.ts's formatting logic a second time on the targeted side,
-// which Phase 3A's instructions explicitly don't ask for (only DB-access
-// parity, not decision/formatting-logic parity). What IS honestly checkable
-// with what's built so far: for each university with a non-empty legacy
-// fact_bundle, did the targeted query fetch ANY row for that university at
-// all? A "yes" for every such university is reported as "exact"; any
-// university where legacy has facts but targeted fetched zero rows is a
-// real, reportable mismatch (e.g. the field wasn't in the allowlist, or the
-// fetch failed).
-function compareFactValues(legacyCards: ResultCard[], targeted: TargetedQueryResult): "exact" | "partial_mismatch" | "not_applicable" {
-  const targetedById = new Map(targeted.factBundles.map((bundle) => [bundle.universityId, bundle]));
+// Presence/equality-level comparison for a specific per-card field getter --
+// shared logic for fact/source/condition/unknown comparisons below. "exact"
+// requires every legacy card's own value to be reproduced by the matching
+// targeted card; universities missing from targeted entirely don't count
+// against this (that's already captured by missingFromTargeted/mismatch).
+function compareField<T>(
+  legacyCards: ResultCard[],
+  targetedById: Map<string, ResultCard>,
+  getValue: (card: ResultCard) => T,
+  isEqual: (a: T, b: T) => boolean,
+): "exact" | "partial_mismatch" | "not_applicable" {
   let checked = 0;
   let mismatched = 0;
   for (const card of legacyCards) {
-    if (!card.fact_bundle?.length) continue;
+    const targetedCard = targetedById.get(cardKey(card));
+    if (!targetedCard) continue;
     checked += 1;
-    const bundle = targetedById.get(card.university_id);
-    const targetedRowCount = bundle ? Object.values(bundle.facts).flat().length : 0;
-    if (targetedRowCount === 0) mismatched += 1;
+    if (!isEqual(getValue(card), getValue(targetedCard))) mismatched += 1;
   }
   if (!checked) return "not_applicable";
   return mismatched === 0 ? "exact" : "partial_mismatch";
 }
 
-// Same presence-level approach as compareFactValues, applied to source_url
-// specifically: for each university where the legacy fact_bundle has at
-// least one real source URL, did the targeted query fetch at least one row
-// with a source_url at all for that same university?
-function compareSourcePresence(legacyCards: ResultCard[], targeted: TargetedQueryResult): "exact" | "partial_mismatch" | "not_applicable" {
-  const targetedById = new Map(targeted.factBundles.map((bundle) => [bundle.universityId, bundle]));
-  let checked = 0;
-  let mismatched = 0;
-  for (const card of legacyCards) {
-    const hasLegacySource = (card.fact_bundle ?? []).some((fact) => fact.source_url);
-    if (!hasLegacySource) continue;
-    checked += 1;
-    const bundle = targetedById.get(card.university_id);
-    const hasTargetedSource = bundle ? Object.values(bundle.facts).flat().some((row) => Boolean(row.source_url)) : false;
-    if (!hasTargetedSource) mismatched += 1;
-  }
-  if (!checked) return "not_applicable";
-  return mismatched === 0 ? "exact" : "partial_mismatch";
+function factSignature(card: ResultCard): string {
+  return (card.fact_bundle ?? [])
+    .map((fact) => `${fact.field_key ?? ""}:${fact.value ?? ""}`)
+    .sort()
+    .join("|");
+}
+
+function sourceSignature(card: ResultCard): string {
+  return (card.fact_bundle ?? [])
+    .map((fact) => fact.source_url ?? "")
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function conditionSignature(card: ResultCard): string {
+  return (card.condition_checks ?? [])
+    .map((check) => `${check.key}:${check.state}`)
+    .sort()
+    .join("|");
+}
+
+function unknownFieldSignature(card: ResultCard): string {
+  return [...(card.unknown_fields ?? [])].sort().join("|");
 }
 
 export function computeShadowParity(args: {
   requestId: string;
   intent: string;
   legacyCards: ResultCard[];
+  targetedCards: ResultCard[];
   targeted: TargetedQueryResult | null;
   targetedError?: string;
   legacyQueryMs: number;
+  legacyTotalFactRows: number;
   targetedQueryMs: number;
 }): ShadowParityLog {
-  const legacyUniversityIds = args.legacyCards.map((card) => card.university_id);
-  const targetedUniversityIds = args.targeted?.universityIds ?? [];
+  const legacyUniversityIds = args.legacyCards.map(cardKey);
+  const targetedUniversityIds = args.targetedCards.map(cardKey);
 
   const legacySet = new Set(legacyUniversityIds);
   const targetedSet = new Set(targetedUniversityIds);
@@ -113,6 +119,7 @@ export function computeShadowParity(args: {
     return {
       requestId: args.requestId,
       intent: args.intent,
+      candidateSource: "none",
       legacyUniversityIds,
       targetedUniversityIds: [],
       missingFromTargeted: legacyUniversityIds,
@@ -120,35 +127,50 @@ export function computeShadowParity(args: {
       orderMatches: false,
       factValueParity: "not_applicable",
       sourceParity: "not_applicable",
-      conditionStateParity: "not_computed_by_targeted",
-      unknownFieldParity: "not_computed_by_targeted",
+      conditionStateParity: "not_applicable",
+      unknownFieldParity: "not_applicable",
       fetchedTables: [],
+      queryCount: 0,
       rowCountsByTable: {},
-      legacyFetchedRowCount: legacyRowCount(args.legacyCards),
+      legacyTotalFactRows: args.legacyTotalFactRows,
       targetedFetchedRowCount: 0,
       legacyQueryMs: args.legacyQueryMs,
       targetedQueryMs: args.targetedQueryMs,
       parityStatus: "shadow_error",
+      unsupportedFields: [],
       targetedErrors: args.targetedError ? [args.targetedError] : ["targeted_query_unavailable"],
     };
   }
 
-  const factValueParity = compareFactValues(args.legacyCards, args.targeted);
-  const sourceParity = compareSourcePresence(args.legacyCards, args.targeted);
+  const targetedById = new Map(args.targetedCards.map((card) => [cardKey(card), card]));
+  const factValueParity = compareField(args.legacyCards, targetedById, factSignature, (a, b) => a === b);
+  const sourceParity = compareField(args.legacyCards, targetedById, sourceSignature, (a, b) => a === b);
+  const conditionStateParity = compareField(args.legacyCards, targetedById, conditionSignature, (a, b) => a === b);
+  const unknownFieldParity = compareField(args.legacyCards, targetedById, unknownFieldSignature, (a, b) => a === b);
 
   const targetedFetchedRowCount = Object.values(args.targeted.rowCountsByTable).reduce((sum, count) => sum + count, 0);
   const idsExact = missingFromTargeted.length === 0 && extraInTargeted.length === 0 && orderMatches;
+  // "equivalent" (same candidate SET, different order -- e.g. a recommendation
+  // query where ranking differs but every legacy match is still present) is
+  // now reachable now that both sides run the identical evaluator: it means
+  // ID recall is 100% and every compared field matched, just not in the same
+  // order.
+  const fieldsAllMatch = [factValueParity, sourceParity, conditionStateParity, unknownFieldParity]
+    .every((status) => status === "exact" || status === "not_applicable");
+  const idsEquivalent = missingFromTargeted.length === 0 && extraInTargeted.length === 0;
+
   const parityStatus: ShadowParityStatus = args.targeted.errors.length
     ? "mismatch"
-    : idsExact
+    : idsExact && fieldsAllMatch
       ? "exact"
-      : missingFromTargeted.length || extraInTargeted.length
-        ? "mismatch"
-        : "equivalent";
+      : idsEquivalent && fieldsAllMatch
+        ? "equivalent"
+        : "mismatch";
 
   return {
     requestId: args.requestId,
     intent: args.intent,
+    candidateSource: args.targeted.candidateSource,
     legacyUniversityIds,
     targetedUniversityIds,
     missingFromTargeted,
@@ -156,15 +178,17 @@ export function computeShadowParity(args: {
     orderMatches,
     factValueParity,
     sourceParity,
-    conditionStateParity: "not_computed_by_targeted",
-    unknownFieldParity: "not_computed_by_targeted",
+    conditionStateParity,
+    unknownFieldParity,
     fetchedTables: args.targeted.fetchedTables,
+    queryCount: args.targeted.queryCount,
     rowCountsByTable: args.targeted.rowCountsByTable,
-    legacyFetchedRowCount: legacyRowCount(args.legacyCards),
+    legacyTotalFactRows: args.legacyTotalFactRows,
     targetedFetchedRowCount,
     legacyQueryMs: args.legacyQueryMs,
     targetedQueryMs: args.targetedQueryMs,
     parityStatus,
+    unsupportedFields: args.targeted.unsupportedFields,
     targetedErrors: args.targeted.errors,
   };
 }

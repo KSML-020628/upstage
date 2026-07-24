@@ -153,6 +153,129 @@ produces, before committing to a real primary-path migration.
   time. Any Phase 3B latency claim needs its own, deliberately cold-cache
   measurement of both paths.
 
+## Phase 3A.1: reuse resolved target IDs, common evaluator, 2-stage candidates
+
+**Principle carried over from Phase 3A, now enforced structurally**: the
+Targeted Query Builder never re-implements matching/ranking. Both
+`getChatUniversities()` (legacy) and `hydrateUniversitiesFromCatalog()`
+(targeted) build the identical `University[]` Domain Model, and
+`app/api/chat/route.ts`'s shadow block runs the SAME `selectCards`/
+`selectClassifiedCards`/`evaluateUniversity`/`passesStructuredFilters`
+functions on both -- no `targeted-only` evaluator exists anywhere in this
+codebase.
+
+**Fix 1 -- reuse already-resolved target IDs directly.** Phase 3A's
+`resolveTargetUniversityIds` only knew how to re-resolve a named university
+via catalog matching, so "셰필드 기숙사" (an alias `route.ts` had already
+resolved to Sheffield via `exactTargets`/`followupTargets`) fell through to
+a full-catalog scan. `resolveCandidateUniversityIds` (targeted-query.ts)
+now takes `providedUniversityIds` -- the same IDs `route.ts` already
+resolved via alias/legacy-name/follow-up matching -- and uses them directly
+as the stage-1 candidate set, skipping catalog resolution entirely whenever
+they exist.
+
+**Fix 2 -- Bristol deadline mismatch was a real, pre-existing production
+bug, not a Targeted-vs-legacy artifact.** Investigated by comparing raw
+`application_deadlines` rows for Bristol directly against Supabase: every
+Bristol row has `deadline_date: null`, with the actual date only present in
+a Korean-formatted `deadline_text` (e.g. "2026년 5월 3일"). `deadlineRowTime()`
+(then inlined in `filters.ts`, now extracted to `app/lib/chat/
+deadline-dates.ts`) only parsed ISO-formatted dates, so it silently
+returned `undefined` for every Bristol row, and any year-filtered deadline
+query rejected all of them -- in BOTH the legacy and the (then-nonexistent)
+targeted path; this was never a shadow-only artifact. Fixed by adding
+Korean (`parseKoreanDate`) and English-longform (`parseEnglishDate`) date
+fallbacks, verified against real data (69 total `deadline_date IS NULL`
+rows, 44 of them Korean-formatted) and confirmed live: Bristol's 2026
+deadline query now returns 1 card on both paths.
+
+**Fix 3 -- critical bug: full catalog passed to hydration silently
+substituted wrong universities.** `hydrateUniversitiesFromCatalog` was
+called with the full ~53-item catalog instead of the resolved candidate IDs
+only, so `selectCards`/`selectClassifiedCards` scored and ranked among all
+53 mostly-empty hydrated objects instead of just the intended candidate(s).
+Confirmed via 3x repeat testing that the real (legacy) response was stable
+(always exactly 1 card, Sheffield) while the shadow's `targetedUniversityIds`
+deterministically substituted 4 different, wrong universities each run --
+ruling out Solar nondeterminism as the cause. Fixed by filtering the catalog
+down to `candidateCatalogItems` (only the resolved candidate IDs) before
+calling `hydrateUniversitiesFromCatalog` (`route.ts`'s shadow block). This
+single fix resolved every single-university and two-university-compare test
+question (Q1-Q5, Q8, Q10, Q11) to `parityStatus: "exact"`.
+
+**Fix 4 -- 2-stage candidate search for recommendation-style queries, and
+why a strict boolean SQL filter breaks recall.** For queries with no named
+university (e.g. "기숙사 배정이 보장되는 대학을 추천해줘"),
+`resolveCandidateUniversityIds` narrows candidates by intersecting a
+catalog region/country filter with a fact-table search
+(`candidateIdsFromHousing`/`candidateIdsFromLanguage`). The first version of
+the housing-guarantee filter used `housing_guaranteed=eq.true`, which
+looked exact (a plain boolean check) but was NOT: `evaluateUniversity`
+(filters.ts:622-628) treats a university whose only housing rows have
+`housing_guaranteed: null` as an "unknown" partial match, which still
+surfaces in the shown card list (the `partiallyMatched` bucket, per this
+file's own three-state display rule). A strict `eq.true` filter silently
+dropped every null-only university from the candidate set before hydration
+ever ran it through the real evaluator -- confirmed live against "기숙사
+배정이 보장되는 대학을 추천해줘": 3 of the 7 legacy-shown universities had
+`housing_guaranteed: null` on every one of their `housing_facts` rows. Fixed
+by widening the SQL filter to `or=(housing_guaranteed.eq.true,
+housing_guaranteed.is.null)` -- over-inclusive by design (a university with
+only null+false rows can slip in as a false positive), which is safe
+because stage 2's hydration + the real evaluator correctly rejects it
+afterward; only under-inclusion breaks recall. Verified live: candidate
+recall for this query is now 100% (all 7 legacy IDs confirmed present in
+the stage-1 candidate set via direct query, independent of the final
+top-N ranking).
+
+**Residual, structural limitation (not fixed, documented instead): legacy
+and the structured fact tables are two independent, unsynced data
+sources.** `getChatUniversities()` (`app/lib/supabase.ts:237`) reads
+`housing_options` from the `ui_profile_json` blob / `canonical_facts`
+(`field_key = 'housing_options'`), while the Targeted Query Builder reads
+the separate, newer `housing_facts` TABLE. For the same real-world
+university these two pipelines can disagree on row count (confirmed live:
+identical `housing_guaranteed` classification for several universities, but
+different row counts between the blob array and the structured table rows).
+`scoreUniversity`'s housing-intent score is `housing_options.length * 4`
+(filters.ts:84), so once the classification (met/unknown/failed) genuinely
+agrees between legacy and targeted, the shared ranker can still produce a
+DIFFERENT top-N cut across the two paths purely from this row-count
+difference feeding score ties -- e.g. for the housing-guarantee
+recommendation question, one exact-match and one extra university swapped
+places in the final 7-card cut even though the candidate SET (pre-ranking)
+was already provably identical. This is not a correctness bug in the
+Targeted Query Builder or in candidate resolution -- it is inherent to
+having two independently-extracted data sources feed the same conceptual
+field, and it falls within the "semantically equivalent final cards"
+tolerance (same qualifying universities, different tie-break order), not
+the "candidate recall must be 100%" requirement. A full fix would require
+either migrating all `housing_options`/`language_requirements`/etc. data
+into the single structured fact tables (a data migration, out of scope
+here) or changing `scoreUniversity` to score by qualification rather than
+row count (a change to shared, already-relied-upon ranking logic, not
+attempted in this phase).
+
+**Unsupported fields fall back to legacy explicitly, not silently.**
+`course_restrictions` and `source_links` still have no dedicated fact table;
+`hydrateUniversitiesFromCatalog` borrows both directly from the
+corresponding legacy `University` object (`legacyProgram?.course_restrictions
+?? []`, `legacyProgram?.source_links ?? []`) rather than leaving them
+empty and pretending the Targeted Query Builder fetched them.
+
+**Row-count fairness fixed.** `countTotalFactRows()` (targeted-query.ts)
+sums every fact array across ALL loaded legacy universities, giving a
+raw-row-count basis for the legacy side that's comparable to
+`targetedFetchedRowCount` (both now count pre-selection raw DB rows, not
+post-selection card contents) -- the Phase 3A caveat about this comparison
+being apples-to-oranges no longer applies to row counts. Cold/warm
+cache-state tagging for latency was flagged as a Phase 3A caveat and is
+still NOT implemented as of this phase -- `legacyQueryMs`/`targetedQueryMs`
+are both wall-clock request-scoped measurements, but neither explicitly
+tags or forces a cold vs. warm Next.js fetch-cache (`revalidate`) state, so
+a latency comparison between them still should not be read as a clean
+cold-cache number for either path.
+
 ## Don't normalize language_requirements.test_type into a fixed enum
 
 **Principle**: `presentLanguage()` (`app/lib/display/present-fact.ts`) shows

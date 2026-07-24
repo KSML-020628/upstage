@@ -9,6 +9,7 @@ import {
 } from "../display/present-fact";
 import { firstSource, rowSource, universitySources } from "./sources";
 import { CURRENCY_TO_KRW } from "./supabase-facts";
+import { deadlineRowTime } from "./deadline-dates.ts";
 import { LANGUAGE_TEST_ALIASES } from "./types";
 import type {
   ConditionCheck,
@@ -467,12 +468,7 @@ export function quotaValue(university: University) {
   return Number.isFinite(value) ? value : undefined;
 }
 
-export function deadlineRowTime(row: Record<string, unknown>) {
-  const text = cleanText(row.deadline_date, cleanText(row.date, cleanText(row.deadline_text)));
-  const iso = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-  if (iso) return Date.parse(iso);
-  return undefined;
-}
+export { deadlineRowTime } from "./deadline-dates.ts"; // re-exported for cards.ts's existing import
 
 function deadlineSemesterOf(row: Record<string, unknown>): DeadlineSemester | undefined {
   const text = normalizeSearchText(`${cleanText(row.semester)} ${cleanText(row.deadline_text)}`);
