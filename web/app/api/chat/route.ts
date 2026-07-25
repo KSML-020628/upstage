@@ -495,7 +495,10 @@ async function handleChatRequest(request: Request) {
     const intent = constraints.intent;
     console.info("[chat-v2] planner-plan", {
       requestId,
-      sessionId,
+      // Never the raw sessionId (a client-generated identifier that can
+      // correlate a real user's requests across turns/logs) -- only
+      // whether one was sent at all.
+      sessionKeyPresent: sessionId !== "unknown",
       mode: plannerMode,
       usedSolar: planner.usedSolar,
       issues: planner.issues,
@@ -644,7 +647,10 @@ async function handleChatRequest(request: Request) {
       hasActionableSearchConditions(constraints),
     );
     if (targetClarification.overriddenByPlanner) {
-      console.info("[chat-v2] target-clarification overridden by planner", { requestId, intent, question });
+      // Never the raw question text -- see [chat-v2] planner-plan's own
+      // comment for why (a client-supplied/user-authored string that can
+      // identify the user or reveal what they asked).
+      console.info("[chat-v2] target-clarification overridden by planner", { requestId, intent });
     }
     if (!explicitFollowup && targetClarification.needsClarification) {
       console.info("[chat-v2] clarification", { requestId, source: "server_rule", intent });
@@ -676,7 +682,9 @@ async function handleChatRequest(request: Request) {
       const regexOnlyVerdict = needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, detectedConstraints);
       const plannerAwareVerdict = needsFollowupScopeClarification(question, contextUniversityIds.length > 0, priorConstraints, constraints);
       if (regexOnlyVerdict !== plannerAwareVerdict) {
-        console.info("[chat-v2] followup-scope-clarification overridden by planner", { requestId, question });
+        // Never the raw question text -- see [chat-v2] planner-plan's own
+        // comment.
+        console.info("[chat-v2] followup-scope-clarification overridden by planner", { requestId });
       }
       if (plannerAwareVerdict) {
         console.info("[chat-v2] clarification", { requestId, source: "followup_scope_ambiguous" });

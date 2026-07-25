@@ -1,5 +1,6 @@
 import { AMERICAS_COUNTRIES, ASIA_COUNTRIES, EUROPE_COUNTRIES, normalizeSearchText } from "./utils.ts";
 import { UNIVERSITY_ALIASES } from "./university-aliases.ts";
+import { isExcludedUniversityId } from "../excluded-universities.ts";
 
 // Phase 3A (shadow-only): a minimal per-university identity record for
 // feeding the Planner and the Targeted Query Builder, deliberately excluding
@@ -72,7 +73,11 @@ export async function getUniversityCatalog(): Promise<UniversityCatalogItem[]> {
     next: { revalidate: 300 },
   });
   if (!response.ok) throw new Error(`getUniversityCatalog fetch failed: ${response.status}`);
-  const rows = await response.json() as CatalogRow[];
+  const allRows = await response.json() as CatalogRow[];
+  // See excluded-universities.ts -- exact-id exclusion, applied here so
+  // the Targeted paths (which resolve candidates from this catalog, never
+  // the full getUniversities() load) also never surface it.
+  const rows = allRows.filter((row) => !isExcludedUniversityId(row.id));
 
   const items = rows.map((row): UniversityCatalogItem => ({
     universityId: row.id,

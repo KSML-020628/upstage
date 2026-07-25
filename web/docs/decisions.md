@@ -733,3 +733,78 @@ several -- a real information loss the review's own examples didn't surface
 because they were all single-test rows. Only 4/124 rows have no `test_type`
 at all; those now say "시험 종류 확인 필요" instead of guessing, per the
 review's own principle of not inventing a test from a bare score.
+
+## Final production structure: single-university Targeted-first, everything else stays Legacy
+
+This is the confirmed, final operating structure for the initial
+production canary -- single-university language/housing/deadline/general
+lookups go Targeted-first with automatic Legacy fallback on any failure;
+compound-condition recommendations, 2+-university comparisons, and
+follow-up re-ranking all stay on the existing Legacy path (not expanded to
+in this step, matching the explicit instruction not to). Phase 3B step 4's
+complex-recommendation work and the step 3+4 integration branch both stay
+unmerged, parked for a later decision.
+
+### North Park University removed (example/demo data)
+
+Canonical id: `06e08924-f32d-4f73-962b-3b138f195e62`. Zero references
+existed anywhere in the current `origin/main` codebase before this step
+(confirmed via a full-repo search for "North Park" -- no seed/fixture/
+static data file, no alias entry) -- the only historical trace was a
+single-line, never-merged stash (`1abf41af...`, inspected but not applied
+or deleted, per instruction) adding a cover-image mapping. All of the
+university's real data lives in the production Supabase database:
+`universities` (1 row), `canonical_facts` (1 row, `field_key =
+ui_profile_json`); `language_requirements`/`housing_facts`/
+`application_deadlines`/`cost_facts`/`extracted_facts` all confirmed 0
+rows for this id (read-only queries against the live database, via
+`SUPABASE_SERVICE_ROLE_KEY`).
+
+**Direct database deletion could not be executed from this session** --
+the platform's own safety guardrails blocked the DELETE call as a
+destructive production-database operation. Per the instruction's own
+fallback for this exact situation: added `app/lib/excluded-universities.ts`
+(a single exact-id set, `EXCLUDED_UNIVERSITY_IDS`, deliberately never a
+name-substring match), applied at the three independent places university
+rows are ever fetched from Supabase -- `getUniversities()`/`getUniversity()`
+(`app/lib/supabase.ts`) and `getUniversityCatalog()`
+(`app/lib/chat/university-catalog.ts`) -- confirmed to be the only three
+call sites in the codebase that construct a `universities?select=...` REST
+query, so every downstream consumer (search, `/universities` list,
+`/explore` map, chatbot single-lookup and recommendation/comparison paths,
+the `[id]` detail page, direct API access) inherits the exclusion without
+its own filter. `getChatUniversities()` calls `getUniversities()`
+internally, so it needed no separate change. The exact manual-deletion SQL
+is in `scripts/remove-north-park-university.sql`, written directly from
+the verified row counts above -- **running it against production is still
+outstanding** and must be done by someone with direct database access.
+
+Live-verified (dev server, both Targeted flags on): all 5 required
+questions -- direct info, language, housing, comparison-with-Sheffield,
+US-recommendation -- correctly show 0 North Park cards, 0 detail data
+(direct id lookup on `/universities/06e08924-...` returns 404), and other
+universities are unaffected (the "not found" response correctly reports
+"53개 교환대학" -- one fewer than the pre-exclusion 54, and the same name
+echoed back from the user's own question text, not real North Park data).
+`/universities` and `/explore` page HTML confirmed to contain zero
+mentions.
+
+### Raw sessionId (and raw question text) removed from operational logs
+
+`[chat-v2] planner-plan` (`route.ts`) was still logging the raw client-sent
+`sessionId` value on `origin/main` (Phase 3B step 3's fix for this exact
+issue exists but was never merged, per instruction not to merge that
+branch here) -- replaced with `sessionKeyPresent: sessionId !== "unknown"`,
+matching the boolean-only pattern already used elsewhere. Auditing every
+`console.info`/`warn`/`error` call in `route.ts` and `app/lib/**` for this
+step also found two logs carrying the raw user question text
+(`[chat-v2] target-clarification overridden by planner`,
+`[chat-v2] followup-scope-clarification overridden by planner`) --
+`question` removed from both, keeping their other diagnostic fields
+(`requestId`/`intent`). No other log call anywhere in `route.ts` or
+`app/lib/**` logs `sessionId`, question text, or full fact content (the
+existing `[chat-v2] targeted-primary`/`selection`/`targeted-query-shadow`
+logs already carry only counts, booleans, ids, and fixed reason strings).
+Live-verified: grepped a real server log covering all 9 required-path test
+requests for both the literal sessionId strings used and the literal
+question text used -- zero matches for either, in every request.

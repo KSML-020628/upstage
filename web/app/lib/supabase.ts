@@ -1,4 +1,5 @@
 import { fallbackUniversities } from "./fallback-data.ts";
+import { isExcludedUniversityId } from "./excluded-universities.ts";
 import type { ExchangeProgram, ProfileSection, University } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -273,7 +274,11 @@ async function hydrateUniversity(row: SamuelUniversityRow, prefetchedFacts?: Can
 
 export async function getUniversities(): Promise<University[]> {
   try {
-    const rows = await requestAll<SamuelUniversityRow>("universities?select=id,name,country,city,homepage_url,exchange_url&order=name.asc");
+    const allRows = await requestAll<SamuelUniversityRow>("universities?select=id,name,country,city,homepage_url,exchange_url&order=name.asc");
+    // See excluded-universities.ts -- exact-id exclusion, applied here so
+    // every consumer of getUniversities()/getChatUniversities() (search,
+    // map/list, recommendation/comparison chatbot paths) inherits it.
+    const rows = allRows.filter((row) => !isExcludedUniversityId(row.id));
     if (!rows.length) return [];
     const ids = rows.map((row) => row.id);
     const facts = await requestAll<CanonicalFactRow>(
@@ -295,6 +300,10 @@ export async function getUniversities(): Promise<University[]> {
 }
 
 export async function getUniversity(id: string): Promise<University | undefined> {
+  // See excluded-universities.ts -- must return "not found" for a direct
+  // id lookup too (detail page, single-university chatbot fast path), not
+  // just be missing from list/catalog fetches.
+  if (isExcludedUniversityId(id)) return undefined;
   const fallback = fallbackUniversities.find((item) => item.id === id || item.university_name.toLowerCase().includes(id.toLowerCase()));
   try {
     const rows = await request<SamuelUniversityRow[]>(`universities?select=id,name,country,city,homepage_url,exchange_url&id=eq.${encodeURIComponent(id)}&limit=1`);
